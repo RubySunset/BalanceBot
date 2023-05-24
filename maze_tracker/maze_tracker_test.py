@@ -27,7 +27,7 @@ for i in range(RES):
     wall_grid.append(row)
 
 # Load wall grid from file.
-file = open('test_mazes/maze8_4.txt', 'r')
+file = open('test_mazes/maze8_1.txt', 'r')
 raw_lines = file.readlines()
 for j in range(len(raw_lines)):
     line = raw_lines[j].replace(' ', '').strip(string.whitespace)
@@ -57,16 +57,8 @@ for i in range(RES):
             light[3] = 1
         light_grid[i][j] = light
 
-# print('Options:')
-# print('a: Default')
-# print('b: Animation')
-# option = ''
-# while option not in ('a', 'b'):
-#     option = input()
-
 iterations = 0
 while True:
-
     # Check for timeout.
     iterations += 1
     if iterations > 1000:
@@ -75,7 +67,7 @@ while True:
 
     # Print current state of maze.
     norm_pos = (int(pos[0] * RES), int(pos[1] * RES))
-    tracker.print_maze(norm_pos, orientation)
+    tracker.maze_grid.print_maze(norm_pos, orientation)
 
     # Update maze.
     light = []
@@ -105,18 +97,14 @@ while True:
     elif command == 2:
         orientation = (orientation + 1) % 4
         print('Turn right')
-    # elif command == 3:
-    #     orientation = (orientation + 2) % 4
-    #     # Conceptually, I will treat going into reverse the same as a full 180 rotation.
-    #     print('Reverse')
     elif command == 4:
         print('Stop')
         break
 
-    time.sleep(0.2)
-    print('\n' * 20)
+    # time.sleep(0.2)
+    # print('\n' * 20)
 
 print('Maze graph:')
-print(tracker.maze_graph)
+print(tracker.maze_graph.a_list)
 print('Shortest path:')
-print(tracker.shortest_path)
+print(tracker.maze_graph.shortest_path)
