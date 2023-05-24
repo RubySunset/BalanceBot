@@ -27,7 +27,7 @@ for i in range(RES):
     wall_grid.append(row)
 
 # Load wall grid from file.
-file = open('test_mazes/maze4_3.txt', 'r')
+file = open('test_mazes/maze8_4.txt', 'r')
 raw_lines = file.readlines()
 for j in range(len(raw_lines)):
     line = raw_lines[j].replace(' ', '').strip(string.whitespace)
@@ -57,6 +57,13 @@ for i in range(RES):
             light[3] = 1
         light_grid[i][j] = light
 
+# print('Options:')
+# print('a: Default')
+# print('b: Animation')
+# option = ''
+# while option not in ('a', 'b'):
+#     option = input()
+
 iterations = 0
 while True:
 
@@ -83,7 +90,7 @@ while True:
             print('Forwards')
         else:
             v = -velocity
-            print('Reverse')
+            print('Backwards')
         if orientation == 0:
             pos[1] -= v
         elif orientation == 1:
@@ -106,8 +113,8 @@ while True:
         print('Stop')
         break
 
-    # time.sleep(0.2)
-    # print('\n' * 20)
+    time.sleep(0.2)
+    print('\n' * 20)
 
 print('Maze graph:')
 print(tracker.maze_graph)

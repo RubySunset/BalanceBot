@@ -3,10 +3,11 @@ from enum import Enum
 
 # Maze grid cell type.
 class CellType(Enum):
-    EMPTY = 0
-    JUNCTION = 1
-    START = 2
-    END = 3
+    EMPTY = 0 # Unvisited cell
+    PASSAGE = 1
+    JUNCTION = 2
+    START = 3
+    END = 4
 
 # Maze grid cell.
 # Type: one of CellType's values.
@@ -28,8 +29,8 @@ class MazeTracker:
     OUTPUT_X = 1
     OUTPUT_Y = 1
     # Number of possible x, y coordinates (resolution).
-    X_RES = 4
-    Y_RES = 4
+    X_RES = 8
+    Y_RES = 8
 
     def __init__(self):
         # Initialise maze grid (a convenient representation of the maze constructed in the discovery phase).
@@ -106,6 +107,14 @@ class MazeTracker:
         if self.maze_grid[pos[0]][pos[1]].type == CellType.EMPTY:
             self.promote_cell(pos, CellType.JUNCTION, links)
     
+    # Adds a new passage to the maze grid if one does not already exist in that cell.
+    def add_passage(self, pos, orientation):
+        if self.maze_grid[pos[0]][pos[1]].type == CellType.EMPTY:
+            if orientation in (0, 2):
+                self.promote_cell(pos, CellType.PASSAGE, [1, 0, 1, 0])
+            else:
+                self.promote_cell(pos, CellType.PASSAGE, [0, 1, 0, 1])
+    
     # Generates a command to orient or move the robot to face or begin moving in the given direction.
     def correct_orientation(self, desired, actual):
         difference = (desired - actual) % 4
@@ -139,6 +148,7 @@ class MazeTracker:
         # Continue forwards through a corridor.
         if not light[0] and light[1] and light[3]:
             return 0
+        # Note that corridors have no need for mark updation.
         
         links = self.maze_grid[pos[0]][pos[1]].links
         marks = self.maze_grid[pos[0]][pos[1]].marks
@@ -184,8 +194,8 @@ class MazeTracker:
             for i in range(self.X_RES):
                 for j in range(self.Y_RES):
                     cell = self.maze_grid[i][j]
-                    if cell.type == CellType.EMPTY:
-                        continue
+                    if cell.type in (CellType.EMPTY, CellType.PASSAGE):
+                        continue # Only consider junctions, start, end.
                     for k in range(4):
                         if cell.links[k] and cell.marks[k] == 0:
                             self.is_discovered = False
@@ -199,9 +209,9 @@ class MazeTracker:
         
         return self.correct_orientation(target_direction, orientation)
     
-    # Compute the shortest path from the robot's current position to the end using Dijkstra's algorithm.
+    # Compute the shortest path from given source to destination using Dijkstra's algorithm.
     # TODO replace Dijkstra's algorithm with A* search.
-    def find_shortest_path(self, pos):
+    def find_shortest_path(self, source, dest):
         # Construct helper objects.
         distance = {}
         prev = {}
@@ -211,10 +221,10 @@ class MazeTracker:
             prev[vertex] = None
             unvisited.append(vertex)
         # Construct shortest-distance tree.
-        distance[pos] = 0
+        distance[source] = 0
         while len(unvisited) > 0:
             current = unvisited[0]
-            if current == self.end_pos:
+            if current == dest:
                 break
             for vertex in unvisited:
                 if distance[vertex] < distance[current]:
@@ -228,11 +238,12 @@ class MazeTracker:
                     distance[neighbour] = alt_dist
                     prev[neighbour] = current
         # Determine shortest path to end node.
-        self.shortest_path = []
+        shortest_path = []
         node = self.end_pos
         while node != None:
-            self.shortest_path.insert(0, node)
+            shortest_path.insert(0, node)
             node = prev[node]
+        return shortest_path
     
     # Navigate to the next stop on the shortest path.
     def follow_path(self, pos, orientation):
@@ -253,6 +264,14 @@ class MazeTracker:
             return 4
         else:
             return 0
+    
+    # Generate the complete shortest path from start to end, to send somewhere.
+    def generate_complete_path(self):
+        return self.find_shortest_path(self.start_pos, self.end_pos)
+    
+    # Generate the shortest path from start to robot's position, to send somewhere.
+    def generate_partial_path(self, pos):
+        return self.find_shortest_path(self.start_pos, pos)
 
     # # Turn the robot to face into the maze at the start.
     # # This is to avoid some pathological cases that result in infinite loops with looped mazes.
@@ -328,12 +347,14 @@ class MazeTracker:
                 self.prev_vertex = norm_pos
                 if self.prev_pos != norm_pos:
                     self.entry_mark(norm_pos, r_orient)
+            else: # If we are in a corridor.
+                self.add_passage(norm_pos, orientation)
             self.prev_pos = norm_pos
             discovery_command = self.discover_maze(norm_pos, r_orient, r_light)
         
-        # Find the shortest path if needed.
+        # Find the shortest path from current position to destination, when needed.
         if self.is_discovered and len(self.shortest_path) == 0:
-            self.find_shortest_path(norm_pos)
+            self.shortest_path = self.find_shortest_path(norm_pos, self.end_pos)
         
         # Generate navigation command.
         cell = self.maze_grid[norm_pos[0]][norm_pos[1]] # Re-evaluate cell as it may have been overwritten.
@@ -371,7 +392,7 @@ class MazeTracker:
         # TODO explore the other option for turning, where the robot switches modes.
         
         # Update state.
-        if cell.type != CellType.EMPTY and not self.is_discovered and self.prev_command == 0:
+        if cell.type not in (CellType.EMPTY, CellType.PASSAGE) and not self.is_discovered and self.prev_command == 0:
             cell.marks[r_orient] += 1 # Add an exit mark just as we are moving away from this junction.
         if self.is_initial:
             self.is_initial = False
@@ -393,10 +414,14 @@ class MazeTracker:
                     cell = self.maze_grid[i][j]
                     if cell.type == CellType.EMPTY:
                         print('. ', end='')
+                    elif cell.type == CellType.PASSAGE:
+                        chars = ('──', '│ ')
+                        print(chars[cell.links[0]], end='')
                     elif cell.type == CellType.JUNCTION:
                         k = 8*cell.links[0] + 4*cell.links[1] + 2*cell.links[2] + cell.links[3]
-                        chars = ('!', '⫞', '⫟', '◹', '⊦', '?', '◸', '▽', '⫠', '◿', '?', '◁', '◺', '△', '▷', '+')
-                        print(chars[k] + ' ', end='')
+                        # chars = ('?', '⫞', '⫟', '◹', '⊦', '?', '◸', '▽', '⫠', '◿', '?', '◁', '◺', '△', '▷', '+')
+                        chars = ('? ', '╢ ', '╤ ', '┐ ', '╟─', '? ', '┌─', '┬─', '╧', '┘ ', '? ', '┤ ', '└─', '┴─', '├─', '┼─')
+                        print(chars[k], end='')
                     elif cell.type == CellType.START:
                         print('s ', end='')
                     elif cell.type == CellType.END:
