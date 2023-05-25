@@ -4,17 +4,9 @@ from maze_graph import *
 # Main maze tracker class. Instantiate and use this in other modules.
 class MazeTracker:
 
-    # Scaling of input x, y.
-    INPUT_X = 1
-    INPUT_Y = 1
-    # Scaling of output x, y.
-    OUTPUT_X = 1
-    OUTPUT_Y = 1
-    # Number of possible x, y coordinates (resolution).
-    X_RES = 8
-    Y_RES = 8
-
-    def __init__(self):
+    def __init__(self, X_RES, Y_RES):
+        self.X_RES = X_RES
+        self.Y_RES = Y_RES
         self.maze_grid = MazeGrid(self.X_RES, self.Y_RES)
         self.maze_graph = MazeGraph()
         # Other maze state data.
@@ -77,12 +69,14 @@ class MazeTracker:
     #         print('Warning: robot is not on the edge of the maze.')
     #     return self.correct_orientation(desired_orientation, orientation)
     
+    # Updates the maze state based on the robot's position, orientation, and light readings.
+    # Only call update when there is a change in either position or orientation.
     # Inputs:
     # Robot position (x, y).
     # Orientation (number from 0-3 corresponding to north, east, south, west).
     # Light sensor readings (north, east, south, west).
     # Output: navigation command
-    def update(self, input_pos, orientation, light):
+    def update(self, pos, orientation, light):
         # Internal navigation commands:
         # 0: forwards. 1: turn left. 2: turn right. 3: switch to reverse mode, then go forwards. 4: stop.
         # External navigation commands:
@@ -102,7 +96,6 @@ class MazeTracker:
         links = []
         for i in range(4):
             links.append(not r_light[(i - r_orient) % 4])
-        pos = (int(input_pos[0] / self.INPUT_X * self.X_RES), int(input_pos[1] / self.INPUT_Y * self.Y_RES))
 
         # Update the maze state if we are in the discovery phase.
         if not self.is_discovered:
