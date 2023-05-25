@@ -1,4 +1,4 @@
-RES = 8
+RES = 4
 
 # Initialise grid of symbols (each symbol represnts a type of junction/passage).
 symbol_grid = []

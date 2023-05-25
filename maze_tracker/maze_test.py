@@ -78,6 +78,8 @@ for j in range(RES):
     for i in range(RES):
         f_num = str(manager.tracker.maze_grid.cell_grid[i][j].f_num)
         if len(f_num) == 1:
+            print(f_num + '  ', end='')
+        elif len(f_num) == 2:
             print(f_num + ' ', end='')
         else:
             print(f_num, end='')

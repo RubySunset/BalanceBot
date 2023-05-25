@@ -10,7 +10,7 @@ class MazeTracker:
         self.maze_grid = MazeGrid(self.X_RES, self.Y_RES)
         # Other maze state data.
         self.is_initial = True # Initial state?
-        self.is_finished = False # Have we reached the end?
+        self.is_finished = False # Are we finished (reached end and shortest path determined)?
         self.prev_command = 0 # The previous navigation command - used to force straight after turn.
         self.prev_pos = None # The previous robot position - used to determine when we enter/exit a cell.
         self.reverse_mode = False # Is the robot in reverse mode?
@@ -79,16 +79,17 @@ class MazeTracker:
         # Update the maze state before navigating.
         if self.is_initial: # Update starting node on first iteration.
             self.prev_pos = self.start_pos
-            self.maze_grid.update_links(pos, links)
-            self.maze_grid.flood(self.end_pos)
+            self.maze_grid.visit_cell(pos, links)
+            self.maze_grid.flood()
             print('Starting...')
-        elif pos == self.end_pos and not self.is_finished: # If we have reached the end.
-            self.is_finished = True
-            self.maze_grid.update_links(pos, links)
-            self.maze_grid.find_shortest_path(self.start_pos, self.end_pos)
+        elif pos == self.end_pos and self.prev_pos != pos: # If we have just reached the end.
+            self.maze_grid.visit_cell(pos, links)
+            self.maze_grid.flood()
+            if self.maze_grid.test_end():
+                self.is_finished = True
         else:
-            self.maze_grid.update_links(pos, links)
-            self.maze_grid.flood(self.end_pos)
+            self.maze_grid.visit_cell(pos, links)
+            self.maze_grid.flood()
         self.prev_pos = pos
 
         # Generate navigation command.
