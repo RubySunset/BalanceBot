@@ -127,9 +127,14 @@ class MazeTracker:
             else: # If we are in a corridor.
                 self.maze_grid.add_passage(pos, r_orient)
             self.prev_pos = pos
-            target_direction, self.is_discovered = self.maze_grid.discover_maze(pos, r_orient, r_light, self.is_initial, self.reached_end, self.is_discovered)
+            target_direction = self.maze_grid.discover_maze(pos, r_orient, r_light, self.is_initial)
             discovery_command = self.correct_orientation(target_direction, r_orient)
-            if self.is_discovered:
+        
+        # Check if enough of maze has been discovered.
+        if self.reached_end and not self.is_discovered:
+            dist_tree = self.maze_graph.distance_tree(self.start_pos)
+            if self.maze_grid.enough_discovered(self.end_pos, dist_tree):
+                self.is_discovered = True
                 self.maze_graph.generate_remaining_path(pos, self.end_pos)
         
         # Generate navigation command.

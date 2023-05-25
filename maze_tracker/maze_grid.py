@@ -91,11 +91,11 @@ class MazeGrid:
     
     # Navigate using the modified Tremaux algorithm in order to discover the maze.
     # Note that light is taken relative to the robot to determine corridors.
-    def discover_maze(self, pos, orientation, light, is_initial, reached_end, was_discovered):
+    def discover_maze(self, pos, orientation, light, is_initial):
         # Continue forwards through a corridor.
         # Note that corridors have no need for mark updation.
         if not light[0] and light[1] and light[3]:
-            return orientation, was_discovered
+            return orientation
         
         links = self.cell_grid[pos[0]][pos[1]].links
         marks = self.cell_grid[pos[0]][pos[1]].marks
@@ -134,28 +134,48 @@ class MazeGrid:
                     min_link = i
                     min_val = marks[i]
             target_direction = min_link
-
-        # Check if we have explored the entire maze.
-        is_discovered = was_discovered
-        if reached_end:
-            is_discovered = True
-            for i in range(self.X_RES):
-                for j in range(self.Y_RES):
-                    cell = self.cell_grid[i][j]
-                    if cell.type in (CellType.EMPTY, CellType.PASSAGE):
-                        continue # Only consider junctions, start, end.
-                    for k in range(4):
-                        if cell.links[k] and cell.marks[k] == 0:
-                            is_discovered = False
-                            break
-                    if not is_discovered:
-                        break
-                if not is_discovered:
-                    break
-            if is_discovered:
-                print('Maze discovered!')
         
-        return target_direction, is_discovered
+        return target_direction
+
+    # Find the Manhattan distance between two nodes.
+    def manhattan_dist(self, source, dest):
+        return abs(source[0] - dest[0]) + abs(source[1] - dest[1])
+    
+    # Finds the position of the cell connected to the cell with the given position via the given link.
+    def adj_pos(self, pos, link):
+        if link == 0:
+            return (pos[0], pos[1] - 1)
+        elif link == 1:
+            return (pos[0] + 1, pos[1])
+        elif link == 2:
+            return (pos[0], pos[1] + 1)
+        elif link == 3:
+            return (pos[0] - 1, pos[1])
+        else:
+            print('adj_pos(): invalid link ' + str(link) + '.')
+
+    # Test to see if we have discovered enough of the maze to determine the shortest path.
+    def enough_discovered(self, end, dist_tree):
+        enough = True
+        for i in range(self.X_RES):
+            for j in range(self.Y_RES):
+                cell = self.cell_grid[i][j]
+                if cell.type not in (CellType.JUNCTION, CellType.START):
+                    continue # Only consider junctions and start point.
+                for k in range(4):
+                    if cell.links[k] and cell.marks[k] == 0:
+                        adj_pos = self.adj_pos((i, j), k)
+                        min_dist = dist_tree[(i, j)] + 1 + self.manhattan_dist(adj_pos, end)
+                        if min_dist < dist_tree[end]:
+                            enough = False
+                            break
+                if not enough:
+                    break
+            if not enough:
+                break
+        if enough:
+            print('Sufficient portion of maze discovered!')
+        return enough
     
     # Prints the maze grid in the console. Optionally also show the position and orientation of the robot.
     def print_maze(self, pos=None, orientation=None):

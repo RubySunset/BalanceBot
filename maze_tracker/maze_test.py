@@ -11,7 +11,7 @@ orientation = 0
 velocity = 1 / RES * 1
 last_command = None
 
-light_grid = light_grid_i('maze8_5', manager)
+light_grid = light_grid_i('maze8_4', manager)
 # light_grid = light_grid_ii('maze8_3ii', manager)
 pos = [manager.tracker.start_pos[0] / RES, manager.tracker.start_pos[1] / RES]
 

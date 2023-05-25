@@ -35,8 +35,8 @@ class MazeGraph:
         self.a_list[pos] = []
     
     # Compute the shortest path from given source to destination using Dijkstra's algorithm.
-    # TODO replace Dijkstra's algorithm with A* search.
-    def find_shortest_path(self, source, dest):
+    # TODO replace Dijkstra's algorithm with A* search (?).
+    def dijkstra(self, source, dest=None):
         # Construct helper objects.
         distance = {}
         prev = {}
@@ -49,7 +49,7 @@ class MazeGraph:
         distance[source] = 0
         while len(unvisited) > 0:
             current = unvisited[0]
-            if current == dest:
+            if dest != None and current == dest:
                 break
             for vertex in unvisited:
                 if distance[vertex] < distance[current]:
@@ -58,17 +58,24 @@ class MazeGraph:
             for neighbour in self.a_list[current]:
                 if neighbour not in unvisited:
                     continue
-                alt_dist = distance[current] + math.dist(current, neighbour)
+                if current[0] == neighbour[0]:
+                    alt_dist = abs(current[1] - neighbour[1])
+                elif current[1] == neighbour[1]:
+                    alt_dist = abs(current[0] - neighbour[0])
+                else:
+                    print('Graph error')
+                # alt_dist = distance[current] + math.dist(current, neighbour)
                 if alt_dist < distance[neighbour]:
                     distance[neighbour] = alt_dist
                     prev[neighbour] = current
         # Determine shortest path to end node.
         shortest_path = []
-        node = dest
-        while node != None:
-            shortest_path.insert(0, node)
-            node = prev[node]
-        return shortest_path
+        if dest != None:
+            node = dest
+            while node != None:
+                shortest_path.insert(0, node)
+                node = prev[node]
+        return shortest_path, distance
     
     # Navigate to the next stop on the shortest path.
     def follow_path(self, pos, orientation, end_pos):
@@ -90,14 +97,22 @@ class MazeGraph:
         else:
             return orientation
     
+    # Find the current distance tree.
+    def distance_tree(self, start):
+        path, dist = self.dijkstra(start)
+        return dist
+    
     # Generate the path from the robot's current position to the end, to navigate.
     def generate_remaining_path(self, pos, end):
-        self.shortest_path = self.find_shortest_path(pos, end)
+        path, dist = self.dijkstra(pos, end)
+        self.shortest_path = path
     
     # Generate the complete shortest path from start to end, to send somewhere.
     def generate_complete_path(self, start, end):
-        return self.find_shortest_path(start, end)
+        path, dist = self.dijkstra(start, end)
+        return path
     
     # Generate the shortest path from start to robot's position, to send somewhere.
     def generate_partial_path(self, start, pos):
-        return self.find_shortest_path(start, pos)
+        path, dist = self.dijkstra(start, pos)
+        return path
