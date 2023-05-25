@@ -3,21 +3,21 @@ from enum import Enum
 
 # Maze grid cell type.
 class CellType(Enum):
-    EMPTY = 0 # Unvisited cell
-    PASSAGE = 1
-    JUNCTION = 2
-    START = 3
-    END = 4
+    EMPTY = 0 # Unvisited cell.
+    VISITED = 1 # Visited but not start or end.
+    START = 2
+    END = 3
 
 # Maze grid cell.
-# Type: one of CellType's values.
-# Links: boolean[4] recording the presence of each of the 4 links to other cells.
+# type: one of CellType's values.
+# links: boolean[4] recording the presence of each of the 4 links to other cells.
+# f_num: the number assigned to this cell by flooding.
 # Marks: int[4] recording the number of marks on each entrance/exit to/from this cell (used by Tremaux's algorithm).
 class Cell:
-    def __init__(self, type, links, marks):
+    def __init__(self, type, links, f_num):
         self.type = type
         self.links = links
-        self.marks = marks
+        self.f_num = f_num
 
 # Main class for manipulating the maze grid. Import into other modules.
 class MazeGrid:
@@ -29,65 +29,128 @@ class MazeGrid:
         for i in range(self.X_RES):
             row = []
             for j in range(self.Y_RES):
-                row.append(Cell(CellType.EMPTY, [], []))
+                links = [j != 0, i != X_RES - 1, j != Y_RES - 1, i != 0]
+                # Initially assume there are no maze walls except for the outer boundaries.
+                row.append(Cell(CellType.EMPTY, links, 0))
             self.cell_grid.append(row)
+        self.shortest_path = []
     
     # Reset to initial state.
     def reset(self):
         for i in range(self.X_RES):
             for j in range(self.Y_RES):
-                self.cell_grid[i][j] = Cell(CellType.EMPTY, [], [])
-    
-    # Promotes a cell to the given type in the maze grid.
-    def promote_cell(self, pos, type, links):
-        self.cell_grid[pos[0]][pos[1]] = Cell(type, links, [0, 0, 0, 0])
-    
-    # Updates a cell's links.
-    def update_links(self, pos, links):
-        self.cell_grid[pos[0]][pos[1]].links = links
+                links = [j != 0, i != self.X_RES - 1, j != self.Y_RES - 1, i != 0]
+                self.cell_grid[i][j] = Cell(CellType.EMPTY, links, 0)
+        self.shortest_path = []
     
     # Identifies a given cell as the start. We assume that we do not know the links of the starting point in advance.
     def add_start(self, pos):
-        self.promote_cell(pos, CellType.START, [])
+        self.cell_grid[pos[0]][pos[1]].type = CellType.START
     
     # Identifies a given cell as the end. We assume that we do not know the links of the starting point in advance.
     def add_end(self, pos):
-        self.promote_cell(pos, CellType.END, [])
+        self.cell_grid[pos[0]][pos[1]].type = CellType.END
     
-    # Add a mark when entering a junction with the given orientation.
-    def entry_mark(self, pos, orientation):
-        self.cell_grid[pos[0]][pos[1]].marks[(orientation + 2) % 4] += 1
-    
-    # Add a mark when exiting a valid cell, i.e. junction or start/end.
-    def exit_mark(self, pos, orientation):
+    # Updates a cell's links and marks it as visited.
+    def update_links(self, pos, links):
         cell = self.cell_grid[pos[0]][pos[1]]
-        if cell.type not in (CellType.EMPTY, CellType.PASSAGE):
-            cell.marks[orientation] += 1 # Add an exit mark just as we are moving away from this junction.
+        cell.links = links
+        if cell.type == CellType.EMPTY:
+            cell.type = CellType.VISITED
     
-    # Adds a new junction to the maze grid if one does not already exist in that cell.
-    def add_junction(self, pos, links):
-        if self.cell_grid[pos[0]][pos[1]].type == CellType.EMPTY:
-            self.promote_cell(pos, CellType.JUNCTION, links)
+    # Returns the position of the cell connected to the given cell by a given link.
+    def adjacent_cell(self, pos, link):
+        if link == 0:
+            return (pos[0], pos[1] - 1)
+        elif link == 1:
+            return (pos[0] + 1, pos[1])
+        elif link == 2:
+            return (pos[0], pos[1] + 1)
+        elif link == 3:
+            return (pos[0] - 1, pos[1])
+        else:
+            print('adjacent_cell(): invalid link ' + str(link) + '.')
     
-    # Adds a new passage to the maze grid if one does not already exist in that cell.
-    def add_passage(self, pos, orientation):
-        if self.cell_grid[pos[0]][pos[1]].type == CellType.EMPTY:
-            if orientation in (0, 2):
-                self.promote_cell(pos, CellType.PASSAGE, [1, 0, 1, 0])
-            else:
-                self.promote_cell(pos, CellType.PASSAGE, [0, 1, 0, 1])
-    
-    # # Navigate using the wall follower algorithm in order to discover the maze.
-    # def wall_follower(self, light):
-    #     # Note that we use relative light readings to generate navigation commands using the wall follower algorithm.
-    #     if not light[3]: # No boundary to left.
-    #         return 1
-    #     elif light[0] and not light[1]: # Boundary in front but none to the right.
-    #         return 2
-    #     elif light[0] and light[1]: # Boundaries everywhere except behind.
-    #         return 3
-    #     else:
-    #         return 0
+    # Flood the maze.
+    def flood(self, end_pos):
+        for i in range(self.X_RES):
+            for j in range(self.Y_RES):
+                self.cell_grid[i][j].f_num = math.inf # Initially assume all cells are at infinity.
+        self.cell_grid[end_pos[0]][end_pos[1]].f_num = 0 # End cell has flood number 0.
+        queue = [] # Use a queue since flooding is a breadth-first operation.
+        queue.append(end_pos)
+        while len(queue) > 0:
+            pos = queue.pop(0)
+            cell = self.cell_grid[pos[0]][pos[1]]
+            for i in range(4):
+                if not cell.links[i]:
+                    continue
+                adj_pos = self.adjacent_cell(pos, i)
+                adj_cell = self.cell_grid[adj_pos[0]][adj_pos[1]]
+                if adj_cell.links[(i + 2) % 4] and adj_cell.f_num == math.inf:
+                    # Both cells must have links to each other. (*)
+                    # Only replace this cell's flood number if it has not already been replaced.
+                    adj_cell.f_num = cell.f_num + 1
+                    queue.append(adj_pos)
+        # (*) it is possible for an undiscovered cell to appear to have a link to a cell with a wall facing it,
+        # since undiscovered cells are assumed to have all links (apart from the outer boundaries).
+        # Therefore we must check both cells for links.
+
+    # Find the target direction based on the flood numbers.
+    def navigate(self, pos):
+        cell = self.cell_grid[pos[0]][pos[1]]
+        min_val = math.inf
+        min_link = 0
+        for i in range(4):
+            if cell.links[i]:
+                adj_pos = self.adjacent_cell(pos, i)
+                adj_cell = self.cell_grid[adj_pos[0]][adj_pos[1]]
+                if adj_cell.f_num < min_val:
+                    min_val = adj_cell.f_num
+                    min_link = i
+        return min_link
+
+    # Find the shortest path at the end using the flood numbers.
+    def find_shortest_path(self, start_pos, end_pos):
+        pos = start_pos
+        self.shortest_path = []
+        self.shortest_path.append(pos)
+        while pos != end_pos:
+            cell = self.cell_grid[pos[0]][pos[1]]
+            for i in range(4):
+                if cell.links[i]:
+                    next_pos = self.adjacent_cell(pos, i)
+                    if self.cell_grid[next_pos[0]][next_pos[1]].f_num < cell.f_num:
+                        self.shortest_path.append(next_pos)
+                        pos = next_pos
+                        break
+
+    # Prints the maze grid in the console. Optionally also show the position and orientation of the robot.
+    def print_maze(self, pos=None, orientation=None):
+        print('--' * self.Y_RES)
+        for j in range(self.Y_RES):
+            for i in range(self.X_RES):
+                if pos != None and pos[0] == i and pos[1] == j:
+                    if orientation == None:
+                        print('o ', end='')
+                    else:
+                        chars = ('↑', '→', '↓', '←')
+                        print(chars[orientation] + ' ', end='')
+                else:
+                    cell = self.cell_grid[i][j]
+                    if cell.type == CellType.EMPTY:
+                        print('· ', end='')
+                    elif cell.type == CellType.START:
+                        print('s ', end='')
+                    elif cell.type == CellType.END:
+                        print('e ', end='')
+                    else:
+                        k = 8*cell.links[0] + 4*cell.links[1] + 2*cell.links[2] + cell.links[3]
+                        # chars = ('?', '⫞', '⫟', '◹', '⊦', '?', '◸', '▽', '⫠', '◿', '?', '◁', '◺', '△', '▷', '+')
+                        chars = ('? ', '╢ ', '╤ ', '┐ ', '╟─', '──', '┌─', '┬─', '╧ ', '┘ ', '│ ', '┤ ', '└─', '┴─', '├─', '┼─')
+                        print(chars[k], end='')
+            print()
+        print('--' * self.Y_RES)
     
     # Navigate using the modified Tremaux algorithm in order to discover the maze.
     # Note that light is taken relative to the robot to determine corridors.
@@ -156,33 +219,3 @@ class MazeGrid:
                 print('Maze discovered!')
         
         return target_direction, is_discovered
-    
-    # Prints the maze grid in the console. Optionally also show the position and orientation of the robot.
-    def print_maze(self, pos=None, orientation=None):
-        print('--' * self.Y_RES)
-        for j in range(self.Y_RES):
-            for i in range(self.X_RES):
-                if pos != None and pos[0] == i and pos[1] == j:
-                    if orientation == None:
-                        print('o ', end='')
-                    else:
-                        chars = ('↑', '→', '↓', '←')
-                        print(chars[orientation] + ' ', end='')
-                else:
-                    cell = self.cell_grid[i][j]
-                    if cell.type == CellType.EMPTY:
-                        print('· ', end='')
-                    elif cell.type == CellType.PASSAGE:
-                        chars = ('──', '│ ')
-                        print(chars[cell.links[0]], end='')
-                    elif cell.type == CellType.JUNCTION:
-                        k = 8*cell.links[0] + 4*cell.links[1] + 2*cell.links[2] + cell.links[3]
-                        # chars = ('?', '⫞', '⫟', '◹', '⊦', '?', '◸', '▽', '⫠', '◿', '?', '◁', '◺', '△', '▷', '+')
-                        chars = ('? ', '╢ ', '╤ ', '┐ ', '╟─', '? ', '┌─', '┬─', '╧ ', '┘ ', '? ', '┤ ', '└─', '┴─', '├─', '┼─')
-                        print(chars[k], end='')
-                    elif cell.type == CellType.START:
-                        print('s ', end='')
-                    elif cell.type == CellType.END:
-                        print('e ', end='')
-            print()
-        print('--' * self.Y_RES)

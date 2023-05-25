@@ -8,17 +8,19 @@ manager = MazeManager()
 # Initialise robot.
 pos = [0, 0] # Replace this with the starting position later.
 orientation = 0
-velocity = 1 / RES * 0.8
+velocity = 1 / RES * 1
 last_command = None
 
-# light_grid = light_grid_i('maze8_1', manager)
-light_grid = light_grid_ii('maze8_3ii', manager)
+light_grid = light_grid_i('maze8_5', manager)
+# light_grid = light_grid_ii('maze8_3ii', manager)
+start_pos = manager.tracker.start_pos
+pos = [start_pos[0] / RES, start_pos[1] / RES]
 
 iterations = 0
 while True:
     # Check for timeout.
     iterations += 1
-    if iterations > 10000:
+    if iterations > 1000:
         print('!! Timeout !!')
         break
 
@@ -67,11 +69,20 @@ while True:
     # print('\n' * 20)
 
 print('Iterations: ' + str(iterations))
-print('Maze graph:')
-print(manager.tracker.maze_graph.a_list)
+# print('Maze graph:')
+# print(manager.tracker.maze_graph.a_list)
 print('Shortest path:')
-print(manager.tracker.maze_graph.shortest_path)
-# print('Marks (for Tremaux\'s algorithm)')
+print(manager.tracker.maze_grid.shortest_path)
+print('Flood numbers:')
+for j in range(RES):
+    for i in range(RES):
+        f_num = str(manager.tracker.maze_grid.cell_grid[i][j].f_num)
+        if len(f_num) == 1:
+            print(f_num + ' ', end='')
+        else:
+            print(f_num, end='')
+    print()
+# print('Flood numbers:')
 # for i in range(RES):
 #     for j in range(RES):
-#         print(i, j, tracker.maze_grid.cell_grid[i][j].marks)
+#         print(i, j, manager.tracker.maze_grid.cell_grid[i][j].f_num)
