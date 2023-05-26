@@ -11,7 +11,7 @@ orientation = 0
 velocity = 1 / RES * 1
 last_command = None
 
-light_grid = light_grid_i('maze8_4', manager)
+light_grid = light_grid_i('maze8_1', manager)
 # light_grid = light_grid_ii('maze8_3ii', manager)
 pos = [manager.tracker.start_pos[0] / RES, manager.tracker.start_pos[1] / RES]
 
@@ -19,7 +19,7 @@ iterations = 0
 while True:
     # Check for timeout.
     iterations += 1
-    if iterations > 10000:
+    if iterations > 1000:
         print('!! Timeout !!')
         break
 
@@ -34,7 +34,7 @@ while True:
     command = manager.receive_data(pos, orientation, light)
     if command == -1:
         print('(last command) ', end='')
-        command = last_command # Continue with last command in absense of new one.
+        command = last_command # Continue with last command in absence of new one.
     else:
         last_command = command
 
@@ -70,8 +70,10 @@ while True:
 print('Iterations: ' + str(iterations))
 print('Maze graph:')
 print(manager.tracker.maze_graph.a_list)
-print('Shortest path:')
-print(manager.tracker.maze_graph.shortest_path)
+print('Internal path:')
+print(manager.tracker.maze_graph.internal_path)
+print('External path:')
+print(manager.tracker.maze_graph.external_path)
 # print('Marks (for Tremaux\'s algorithm)')
 # for i in range(RES):
 #     for j in range(RES):

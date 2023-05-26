@@ -29,76 +29,78 @@ class MazeGrid:
         for i in range(self.X_RES):
             row = []
             for j in range(self.Y_RES):
-                row.append(Cell(CellType.EMPTY, [], []))
+                row.append(Cell(CellType.EMPTY, [0, 0, 0, 0], [0, 0, 0, 0]))
             self.cell_grid.append(row)
     
     # Reset to initial state.
     def reset(self):
         for i in range(self.X_RES):
             for j in range(self.Y_RES):
-                self.cell_grid[i][j] = Cell(CellType.EMPTY, [], [])
+                self.cell_grid[i][j] = Cell(CellType.EMPTY, [0, 0, 0, 0], [0, 0, 0, 0])
     
-    # Promotes a cell to the given type in the maze grid.
-    def promote_cell(self, pos, type, links):
-        self.cell_grid[pos[0]][pos[1]] = Cell(type, links, [0, 0, 0, 0])
+    # Returns the cell at the given position.
+    def cell(self, pos):
+        return self.cell_grid[pos[0]][pos[1]]
+    
+    # Change the type, and optionally the other attributes, of the given cell.
+    def mutate(self, pos, type, new_links=None, new_marks=None):
+        cell = self.cell(pos)
+        cell.type = type
+        if new_links != None:
+            cell.links = new_links
+        if new_marks != None:
+            cell.marks = new_marks
     
     # Updates a cell's links.
     def update_links(self, pos, links):
         self.cell_grid[pos[0]][pos[1]].links = links
     
+    # Adds a mark at the link of the given cell.
+    def add_mark(self, pos, link):
+        self.cell_grid[pos[0]][pos[1]].marks[link] += 1
+    
     # Identifies a given cell as the start. We assume that we do not know the links of the starting point in advance.
     def add_start(self, pos):
-        self.promote_cell(pos, CellType.START, [])
+        self.mutate(pos, CellType.START)
     
     # Identifies a given cell as the end. We assume that we do not know the links of the starting point in advance.
     def add_end(self, pos):
-        self.promote_cell(pos, CellType.END, [])
+        self.mutate(pos, CellType.END)
     
     # Add a mark when entering a junction with the given orientation.
     def entry_mark(self, pos, orientation):
-        self.cell_grid[pos[0]][pos[1]].marks[(orientation + 2) % 4] += 1
+        self.add_mark(pos, (orientation + 2) % 4)
     
     # Add a mark when exiting a valid cell, i.e. junction or start/end.
     def exit_mark(self, pos, orientation):
-        cell = self.cell_grid[pos[0]][pos[1]]
+        cell = self.cell(pos)
         if cell.type not in (CellType.EMPTY, CellType.PASSAGE):
-            cell.marks[orientation] += 1 # Add an exit mark just as we are moving away from this junction.
+            self.add_mark(pos, orientation)
     
     # Adds a new junction to the maze grid if one does not already exist in that cell.
     def add_junction(self, pos, links):
         if self.cell_grid[pos[0]][pos[1]].type == CellType.EMPTY:
-            self.promote_cell(pos, CellType.JUNCTION, links)
+            self.mutate(pos, CellType.JUNCTION, new_links=links)
     
     # Adds a new passage to the maze grid if one does not already exist in that cell.
     def add_passage(self, pos, orientation):
-        if self.cell_grid[pos[0]][pos[1]].type == CellType.EMPTY:
+        if self.cell(pos).type == CellType.EMPTY:
             if orientation in (0, 2):
-                self.promote_cell(pos, CellType.PASSAGE, [1, 0, 1, 0])
+                self.mutate(pos, CellType.PASSAGE, new_links=[1, 0, 1, 0])
             else:
-                self.promote_cell(pos, CellType.PASSAGE, [0, 1, 0, 1])
-    
-    # # Navigate using the wall follower algorithm in order to discover the maze.
-    # def wall_follower(self, light):
-    #     # Note that we use relative light readings to generate navigation commands using the wall follower algorithm.
-    #     if not light[3]: # No boundary to left.
-    #         return 1
-    #     elif light[0] and not light[1]: # Boundary in front but none to the right.
-    #         return 2
-    #     elif light[0] and light[1]: # Boundaries everywhere except behind.
-    #         return 3
-    #     else:
-    #         return 0
+                self.mutate(pos, CellType.PASSAGE, new_links=[0, 1, 0, 1])
     
     # Navigate using the modified Tremaux algorithm in order to discover the maze.
     # Note that light is taken relative to the robot to determine corridors.
-    def discover_maze(self, pos, orientation, light, is_initial):
+    def navigate(self, pos, orientation, light, is_initial):
+
         # Continue forwards through a corridor.
-        # Note that corridors have no need for mark updation.
         if not light[0] and light[1] and light[3]:
             return orientation
         
-        links = self.cell_grid[pos[0]][pos[1]].links
-        marks = self.cell_grid[pos[0]][pos[1]].marks
+        cell = self.cell(pos)
+        links = cell.links
+        marks = cell.marks
 
         if is_initial:
             for i in range(4):
@@ -112,20 +114,22 @@ class MazeGrid:
         target_direction = 0
         others_unmarked = True # Are all the other entrances unmarked?
         num_entrances = 0
+        candidate = None # A possible direction if all other entrances are unmarked.
         for i in range(4):
             if links[i]:
                 num_entrances += 1
-            if links[i] and marks[i] != 0 and i != entry_mark:
-                others_unmarked = False
-                break
+                if i == entry_mark:
+                    continue
+                elif marks[i] == 0 and candidate == None:
+                    candidate = i
+                elif marks[i] != 0:
+                    others_unmarked = False
+                    break
         if others_unmarked and num_entrances > 1:
             # We can only choose another entrance if there is another entrance to choose from...
-            for i in range(4):
-                if links[i] and i != entry_mark:
-                    target_direction = i
-                    break
+            return candidate
         elif marks[entry_mark] < 2:
-            target_direction = entry_mark
+            return entry_mark
         else:
             min_link = None
             min_val = math.inf
@@ -133,10 +137,8 @@ class MazeGrid:
                 if links[i] and marks[i] < min_val:
                     min_link = i
                     min_val = marks[i]
-            target_direction = min_link
+            return min_link
         
-        return target_direction
-
     # Find the Manhattan distance between two nodes.
     def manhattan_dist(self, source, dest):
         return abs(source[0] - dest[0]) + abs(source[1] - dest[1])
