@@ -27,7 +27,7 @@ class MazeManager:
         # TODO send command to robot.
     
     # Receive data from robot in junction mode.
-    def receive_junction(self, angle, light, walls):
+    def receive_junction(self, pos, angle, light, walls):
         self.tracker.map_maze(walls)
-        command = self.tracker.junction_navigate(angle, light)
+        command = self.tracker.junction_navigate(pos, angle, light)
         # TODO send command to robot.

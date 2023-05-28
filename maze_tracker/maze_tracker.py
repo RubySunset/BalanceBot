@@ -11,7 +11,7 @@ class MazeTracker:
     def __init__(self, X_LIM, Y_LIM):
         self.X_LIM = X_LIM
         self.Y_LIM = Y_LIM
-        self.wall_tracker = WallTracker(self.RES)
+        self.wall_tracker = WallTracker(self.RES, X_LIM, Y_LIM)
         self.is_initial = True # Initial state?
         self.reached_end = False # Have we reached the end?
         # Note that for the time being, I will assume that the entire maze has been mapped by the time the end is reached.
@@ -28,12 +28,10 @@ class MazeTracker:
     
     # Set a starting point.
     def set_start(self, pos):
-        self.start = pos
         self.wall_tracker.set_start(pos)
     
     # Set an end point.
     def set_end(self, pos):
-        self.end = pos
         self.wall_tracker.set_end(pos)
     
     # Process sensor data from the robot to generate the next command.
@@ -63,6 +61,7 @@ class MazeTracker:
             return 'j' # Always consider the starting point as a junction.
         elif abs(pos - self.end) < self.RES/2: # Reached the end.
             self.reached_end = True
+            self.wall_tracker.find_shortest_path(self)
             print('End reached.')
             return 's'
         elif r_light[0]: # Maze boundary in front.
@@ -90,7 +89,8 @@ class MazeTracker:
     # Angle is given in degrees starting clockwise from north, [0, 360].
     # Light readings are booleans taken around the entire unit circle (clockwise).
     # Returns a value in degrees to rotate by (+: clockwise, -: anticlockwise).
-    def junction_navigate(self, angle, light):
+    def junction_navigate(self, pos, angle, light):
+        self.wall_tracker.update_path(pos) # Update the path to send to the web server.
         mid = int(len(light) / 2) # Midpoint index of the light array.
         s_index = None
         count = 0
