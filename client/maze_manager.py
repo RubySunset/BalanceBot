@@ -3,15 +3,17 @@ from maze_tracker import *
 # Main class. Instantiate and use in other modules.
 class MazeManager:
 
+    # Size of arena.
+    X_LIM = 3.6
+    Y_LIM = 2.4
+
     RES = 0.1 # The resolution of the underlying grid that positions are snapped to.
     # The maximum distance between two points for them to be considered the same is RES/2.
 
     J_DIST = 0.5 # The distance we travel straight for after turning at a junction.
 
-    def __init__(self, X_LIM, Y_LIM):
-        self.X_LIM = X_LIM
-        self.Y_LIM = Y_LIM
-        self.tracker = MazeTracker(self.RES, X_LIM, Y_LIM)
+    def __init__(self):
+        self.tracker = MazeTracker(self.RES, self.X_LIM, self.Y_LIM)
         self.is_initial = True # Initial state?
         self.reached_end = False # Have we reached the end?
         # Note that for the time being, I will assume that the entire maze has been mapped by the time the end is reached.
@@ -41,7 +43,7 @@ class MazeManager:
     # f: go forwards.
     # b: go backwards.
     # j: stop at a junction (sweep and perform computer vision).
-    # s: stop (end reached).
+    # e: stop (end reached).
     def default_navigate(self, pos, angle, light):
         
         # Translate inputs to internal form.
@@ -63,7 +65,7 @@ class MazeManager:
             self.reached_end = True
             self.tracker.find_shortest_path(self)
             print('End reached.')
-            return 's'
+            return 'e'
         elif r_light[0]: # Maze boundary in front.
             print('Junction - boundary in front.')
             return 'j'
