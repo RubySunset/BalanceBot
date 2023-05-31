@@ -1,7 +1,15 @@
 import math
 import time
 import heapq
+from enum import Enum
 from PIL import Image
+
+class PixelType(Enum):
+    EMPTY = 0
+    START = 1
+    END = 2
+    WALL = 3
+    COLLISION = 4
 
 # Main class. Instantiate and use in other modules.
 class MazeTracker:
@@ -15,6 +23,11 @@ class MazeTracker:
         self.X_LIM = X_LIM
         self.Y_LIM = Y_LIM
         self.GRID_RES = RES # The resolution of the grid.
+        self.ALLOW = 0.1 # The distance we should maintain from walls in standard units.
+        self.PIXEL_RES = self.GRID_RES / self.PIXELS # The resolution of the pixel array.
+        self.X_PIXELS = int(self.X_LIM / self.PIXEL_RES) + 1 # The number of pixels in the x direction.
+        self.Y_PIXELS = int(self.Y_LIM / self.PIXEL_RES) + 1 # The number of pixels in the y direction.
+        self.P_ALLOW = self.ALLOW / self.PIXEL_RES # The distance we should maintain from walls in pixels.
         self.walls = [] # A list of pairs of points corresponding to lines representing walls in the maze.
         # Note that the first point is always closer to the left than the second point, unless they 
         # have the same x coordinate in which case the first point is closer to the top.
@@ -26,12 +39,25 @@ class MazeTracker:
         # vertices traversed by the robot so far (with loops removed where necessary).
         # When the robot has reached the end and has surveyed the entire maze, this is the shortest path from
         # start to end.
+        self.pixels = [] # The pixel array representing the state of the maze.
+        for i in range(self.X_PIXELS):
+            pixel_row = []
+            for j in range(self.Y_PIXELS):
+                pixel_row.append(PixelType.EMPTY)
+            self.pixels.append(pixel_row)
     
     # Reset to initial state.
     def reset(self):
         self.walls = []
         self.start = None
         self.end = None
+        self.external_path = []
+        self.pixels = []
+        for i in range(self.X_PIXELS):
+            pixel_row = []
+            for j in range(self.Y_PIXELS):
+                pixel_row.append(PixelType.EMPTY)
+            self.pixels.append(pixel_row)
     
     # Discretise a point to fit it to the grid. Also force it into the arena if it is out of bounds.
     def discretise_point(self, point):
@@ -50,13 +76,21 @@ class MazeTracker:
             print('Warning: point out of bounds (bottom).')
         return d_point
     
+    # Convert a point in metres (standard units) to pixels.
+    def to_pixels(self, point):
+        return (round(point[0] / self.PIXEL_RES), round(point[1] / self.PIXEL_RES))
+    
     # Set a starting point.
     def set_start(self, pos):
         self.start = self.discretise_point(pos)
+        self.p_start = self.to_pixels(self.start)
+        self.pixels[self.p_start[0]][self.p_start[1]] = PixelType.START
     
     # Set an end point.
     def set_end(self, pos):
         self.end = self.discretise_point(pos)
+        self.p_end = self.to_pixels(self.end)
+        self.pixels[self.p_end[0]][self.p_end[1]] = PixelType.END
     
     # Update the path traversed by the robot so far while we are still not at the end.
     def update_path(self, pos):
@@ -163,11 +197,38 @@ class MazeTracker:
                 return # Do not add duplicate walls.
         self.walls.append(line)
     
+    # Update the pixel array.
+    def update_pixels(self):
+        for i in range(self.X_PIXELS):
+            for j in range(self.Y_PIXELS):
+                if self.pixels[i][j] not in (PixelType.START, PixelType.END):
+                    self.pixels[i][j] = PixelType.EMPTY # Clear the pixel array (but skip over start and end).
+        for wall in self.walls:
+            p1 = self.to_pixels(wall[0])
+            p2 = self.to_pixels(wall[1])
+            diff = [p2[i] - p1[i] for i in range(2)] # Find the difference vector.
+            p_dist = math.ceil(math.dist(p1, p2)) # Choose the upper bound on the length of the wall.
+            unit_diff = [diff[i] / p_dist for i in range(2)] # Normalise the difference vector to get the direction.
+            current = [p1[0], p1[1]]
+            for i in range(p_dist + 1):
+                c = [round(x) for x in current]
+                for j in range(max(0, math.floor(c[0] - self.P_ALLOW)), min(math.ceil(c[0] + self.P_ALLOW) + 1, self.X_PIXELS)):
+                    for k in range(max(0, math.floor(c[1] - self.P_ALLOW)), min(math.ceil(c[1] + self.P_ALLOW) + 1, self.Y_PIXELS)):
+                        pixel = self.pixels[j][k]
+                        if pixel in (PixelType.START, PixelType.END, PixelType.WALL): # Skip over start, end, previously placed walls.
+                            pass
+                        elif c == [j, k]:
+                            self.pixels[j][k] = PixelType.WALL # Mark this cell as a wall.
+                        elif math.dist(c, (j, k)) <= self.P_ALLOW:
+                            self.pixels[j][k] = PixelType.COLLISION # Mark this cell as inaccessible.
+                current = [current[i] + unit_diff[i] for i in range(2)]
+    
     # Add a list of walls.
     def add_walls(self, input_lines):
         for input_line in input_lines:
             self.add_wall(input_line)
         self.combine_walls()
+        self.update_pixels()
     
     # Find the neighbours of the pixel.
     def find_neighbours(self, pixel, x_pixels, y_pixels):
@@ -199,133 +260,100 @@ class MazeTracker:
     # Find the shortest path from start to end.
     def find_shortest_path(self):
 
-        # Initial parameters.
-        allowance = 0.1 # The distance we should maintain from walls in standard units.
-        pixel_res = self.GRID_RES / self.PIXELS # The resolution of the pixel array.
-        x_pixels = int(self.X_LIM / pixel_res) + 1 # The number of pixels in the x direction.
-        y_pixels = int(self.Y_LIM / pixel_res) + 1 # The number of pixels in the y direction.
-        p_allow = allowance / pixel_res # The distance we should maintain from walls in pixels.
-        last_time = time.time()
-
         # Generate initial arrays.
-        pixels = []
         f = []
         g = []
         prev = []
-        for i in range(x_pixels):
-            pixels_row = []
+        for i in range(self.X_PIXELS):
             f_row = []
             g_row = []
             prev_row = []
-            for j in range(y_pixels):
-                pixels_row.append(0)
+            for j in range(self.Y_PIXELS):
                 f_row.append(math.inf)
                 g_row.append(math.inf)
                 prev_row.append(None)
-            pixels.append(pixels_row)
             f.append(f_row)
             g.append(g_row)
             prev.append(prev_row)
-        print('Setup time: ', time.time() - last_time)
-        last_time = time.time()
-
-        # Add walls and impassable regions to pixel array.
-        for wall in self.walls:
-            p1 = [round(x / pixel_res) for x in wall[0]]
-            p2 = [round(x / pixel_res) for x in wall[1]]
-            diff = [p2[i] - p1[i] for i in range(2)] # Find the difference vector.
-            p_dist = math.ceil(math.dist(p1, p2)) # Choose the upper bound on the length of the wall.
-            unit_diff = [diff[i] / p_dist for i in range(2)] # Normalise the difference vector to get the direction.
-            current = [p1[0], p1[1]]
-            for i in range(p_dist + 1):
-                c = [round(x) for x in current]
-                for j in range(max(0, math.floor(c[0] - p_allow)), min(math.ceil(c[0] + p_allow) + 1, x_pixels)):
-                    for k in range(max(0, math.floor(c[1] - p_allow)), min(math.ceil(c[1] + p_allow) + 1, y_pixels)):
-                        if c == [j, k]:
-                            pixels[j][k] = 2 # Mark this cell as a wall.
-                        elif math.dist(c, (j, k)) <= p_allow and not pixels[j][k]:
-                            pixels[j][k] = 1 # Mark this cell as inaccessible.
-                current = [current[i] + unit_diff[i] for i in range(2)]
-        print('Wall-adding time: ', time.time() - last_time)
+        
         last_time = time.time()
 
         # Use A* search to find the shortest path.
         # TODO replace A* search with an any-angle path planning algorithm.
-        start = (round(self.start[0] / pixel_res), round(self.start[1] / pixel_res))
-        end = (round(self.end[0] / pixel_res), round(self.end[1] / pixel_res))
-        g[start[0]][start[1]] = 0
-        f[start[0]][start[1]] = self.h(start, end)
+        g[self.p_start[0]][self.p_start[1]] = 0
+        f[self.p_start[0]][self.p_start[1]] = self.h(self.p_start, self.p_end)
         open_pq = []
-        heapq.heappush(open_pq, (f[start[0]][start[1]], start))
-        open_set = {start}
+        heapq.heappush(open_pq, (f[self.p_start[0]][self.p_start[1]], self.p_start))
+        open_set = {self.p_start}
         path_found = False
         while len(open_set) > 0:
             current_f, current_pos = heapq.heappop(open_pq)
             open_set.remove(current_pos)
-            if current_pos == end:
+            if current_pos == self.p_end:
                 path_found = True
                 break
-            neighbours = self.find_neighbours(current_pos, x_pixels, y_pixels)
+            neighbours = self.find_neighbours(current_pos, self.X_PIXELS, self.Y_PIXELS)
             for n in neighbours:
-                if not pixels[n[0]][n[1]]:
+                if self.pixels[n[0]][n[1]] not in (PixelType.WALL, PixelType.COLLISION): # If this is a passable area.
                     t = g[current_pos[0]][current_pos[1]] + math.dist(current_pos, n)
                     if t < g[n[0]][n[1]]:
                         prev[n[0]][n[1]] = current_pos
                         g[n[0]][n[1]] = t
-                        f[n[0]][n[1]] = t + self.h(n, end)
+                        f[n[0]][n[1]] = t + self.h(n, self.p_end)
                         if n not in open_set:
                             heapq.heappush(open_pq, (f[n[0]][n[1]], n))
                             open_set.add(n)
         if not path_found:
             raise Exception('Path not found.')
         self.external_path = []
-        current = end
+        current = self.p_end
         while current != None:
             self.external_path.append(current)
             current = prev[current[0]][current[1]]
-        print('A* search time: ', time.time() - last_time)
+        print('A* search time:', round(time.time() - last_time, 3))
+    
+    # Render the pixel array.
+    def render_pixels(self):
         last_time = time.time()
-
-        # Generate image.
-        image = Image.new('RGB', (x_pixels, y_pixels), 'white')
+        image = Image.new('RGB', (self.X_PIXELS, self.Y_PIXELS), 'white')
         img_pixels = image.load()
         for i in range(image.size[0]):
             for j in range(image.size[1]):
-                if (i, j) in self.external_path:
-                    img_pixels[i, j] = (0, 0, 255)
+                pixel = self.pixels[i][j]
+                if pixel == PixelType.START:
+                    colour = (0, 255, 0)
+                elif pixel == PixelType.END:
+                    colour = (255, 0, 0)
+                elif (i, j) in self.external_path:
+                    colour = (0, 0, 255)
+                elif pixel == PixelType.EMPTY:
+                    colour = (0, 0, 0)
+                elif pixel == PixelType.WALL:
+                    colour = (255, 255, 255)
+                elif pixel == PixelType.COLLISION:
+                    colour = (128, 128, 128)
                 else:
-                    p = pixels[i][j] * 127
-                    img_pixels[i, j] = (p, p, p)
-        img_pixels[start[0], start[1]] = (0, 255, 0)
-        img_pixels[end[0], end[1]] = (255, 0, 0)
+                    raise ValueError('Incorrect pixel value: ' + str(pixel) + ' at ' + str((i, j)) + '.')
+                img_pixels[i, j] = colour
         image.show()
-        print('Image generation time: ', time.time() - last_time)
-        last_time = time.time()
-    
-if __name__ == '__main__':
-    tracker = MazeTracker(3, 2, 0.1)
+        print('Image rendering time:', round(time.time() - last_time, 3))
+
+def testing_1(tracker):
     tracker.set_start((0.2, 0.2))
     tracker.set_end((2.8, 1.8))
 
     walls = []
 
-    # Add boundary walls
+    # Add boundary walls.
     walls.append(((0, 0), (tracker.X_LIM, 0)))
     walls.append(((tracker.X_LIM, 0), (tracker.X_LIM, tracker.Y_LIM)))
     walls.append(((0, tracker.Y_LIM), (tracker.X_LIM, tracker.Y_LIM)))
     walls.append(((0, 0), (0, tracker.Y_LIM)))
 
-    # tracker.add_wall(((0.5, 0), (0.5, 1.5)))
-    # tracker.add_wall(((1, 2), (1, 0.5)))
-    # tracker.add_wall(((1.5, 0.5), (1.5, 1.5)))
-    # tracker.add_wall(((1.5, 0.5), (2.5, 0.5)))
-    # tracker.add_wall(((2, 1), (2, 2)))
-
     # Test walls to combine.
     walls.append(((0.5, 0), (0.5, 1)))
     walls.append(((0.5, 0.5), (0.5, 1.5)))
 
-    # walls.append(((0.5, 0), (0.5, 1.5)))
     walls.append(((1, 2), (1.5, 1.5)))
     walls.append(((2, 1), (2.5, 0.5)))
     walls.append(((1, 0.5), (2, 0.5)))
@@ -336,6 +364,30 @@ if __name__ == '__main__':
     walls.append(((2, 1.5), (2.5, 1.5)))
 
     tracker.add_walls(walls)
-    print(len(tracker.walls))
 
+def testing_2(tracker):
+    tracker.set_start((0.2, 0.2))
+    tracker.set_end((2.8, 1.8))
+
+    walls = []
+
+    # Add boundary walls.
+    walls.append(((0, 0), (tracker.X_LIM, 0)))
+    walls.append(((tracker.X_LIM, 0), (tracker.X_LIM, tracker.Y_LIM)))
+    walls.append(((0, tracker.Y_LIM), (tracker.X_LIM, tracker.Y_LIM)))
+    walls.append(((0, 0), (0, tracker.Y_LIM)))
+
+    walls.append(((0.5, 0), (0.5, 1.5)))
+    walls.append(((1, 2), (1, 0.5)))
+    walls.append(((1.5, 0.5), (1.5, 1.5)))
+    walls.append(((1.5, 0.5), (2.5, 0.5)))
+    walls.append(((2, 1), (2, 2)))
+
+    tracker.add_walls(walls)
+    
+if __name__ == '__main__':
+    tracker = MazeTracker(3, 2, 0.1)
+    testing_1(tracker)
+    print('Number of walls:', len(tracker.walls))
     tracker.find_shortest_path()
+    tracker.render_pixels()

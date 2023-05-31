@@ -61,11 +61,6 @@ class MazeManager:
             self.is_initial = False
             print('Starting...')
             return 'j' # Always consider the starting point as a junction.
-        elif abs(pos - self.end) < self.RES/2: # Reached the end.
-            self.reached_end = True
-            self.tracker.find_shortest_path(self)
-            print('End reached.')
-            return 'e'
         elif r_light[0]: # Maze boundary in front.
             print('Junction - boundary in front.')
             return 'j'
@@ -90,8 +85,13 @@ class MazeManager:
     # Generate a navigation command after a junction has been mapped.
     # Angle is given in degrees starting clockwise from north, [0, 360].
     # Light readings are booleans taken around the entire unit circle (clockwise).
-    # Returns a value in degrees to rotate by (+: clockwise, -: anticlockwise).
+    # Returns either a stop command if end reached, or a value in degrees to rotate by (+: clockwise, -: anticlockwise).
     def junction_navigate(self, pos, angle, light):
+        if abs(pos - self.tracker.end) < self.RES/2: # Reached the end.
+            self.reached_end = True
+            self.tracker.find_shortest_path(self)
+            print('End reached.')
+            return 'e'
         self.tracker.update_path(pos) # Update the path to send to the web server.
         mid = int(len(light) / 2) # Midpoint index of the light array.
         s_index = None
