@@ -4,20 +4,12 @@ import time
 # Main class. Instantiate and use in other modules.
 class MazeTracker:
 
-    def __init__(self, X_LIM, Y_LIM, RES):
-
-        # Define constants.
-        self.X_LIM = X_LIM
-        self.Y_LIM = Y_LIM
-        self.GRID_RES = RES # The resolution of the grid.
-
-        # Graph structures/variables.
+    def __init__(self):
         self.a_list = {} # Adjacency list to store the maze graph. Vertices are stored by their positions.
         self.marks = {} # A mapping from vertex positions to lists of link marks (used by Tremaux's algorithm).
         self.prev_vertex = None # The position of the last vertex reached.
         self.start = None # Start position.
         self.end = None # End position.
-
         self.external_path = [] # The path sent to the web server to display.
         # When the robot is still traversing the maze, this is the shortest path from the start to the robot.
         # When the robot has reached the end and has surveyed the entire maze, this is the shortest path from start to end.
@@ -78,7 +70,7 @@ class MazeTracker:
     # Assume all angles are taken clockwise from north in the range [0, 360].
     def visit_vertex(self, pos, link_angles):
         if self.prev_vertex == None: # If we are at the start.
-            self.a_list[pos] = {}
+            self.a_list[pos] = set()
             self.marks[pos] = []
             for i in range(len(link_angles)):
                 self.marks[pos].append(0)
@@ -96,14 +88,18 @@ class MazeTracker:
     def tremaux_navigate(self, pos, link_angles):
 
         marks = self.marks[pos]
+
+        if len(marks) != len(link_angles):
+            raise Exception('Current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(len(marks)) + ').')
         
         # Find entry angle.
         if self.prev_vertex == None: # If we are at the start.
             entry_angle = link_angles[0] # Assume we entered from a valid link, doesn't matter which one.
             entry_link = 0
         else:
-            diff = [pos[i] - self.prev_vertex[i] for i in range(2)]
-            entry_angle = (90 - math.atan2(diff[1], diff[0])) % 360
+            # diff = [pos[i] - self.prev_vertex[i] for i in range(2)]
+            diff = (pos[0] - self.prev_vertex[0], self.prev_vertex[1] - pos[1])
+            entry_angle = (90 - math.degrees(math.atan2(-diff[1], -diff[0]))) % 360
             # Find the link corresponding to the entry angle.
             entry_link = 0
             for i in range(len(link_angles)):
@@ -142,12 +138,12 @@ class MazeTracker:
         return link_angles[target_link]
         
     # Navigate after the discovery phase using Dijkstra.
-    def dijkstra_navigate(self, raw_pos):
-        pos = self.discretise_point(raw_pos)
+    def dijkstra_navigate(self, pos):
         tree, path = self.dijkstra(pos, self.end)
         target_pos = path[1]
-        diff = [target_pos[i] - pos[i] for i in range(2)]
-        return (90 - math.atan2(diff[1], diff[0])) % 360
+        # diff = [target_pos[i] - pos[i] for i in range(2)]
+        diff = (target_pos[0] - pos[0], pos[1] - target_pos[1])
+        return (90 - math.degrees(math.atan2(diff[1], diff[0]))) % 360
     
     # Generate the complete shortest path from start to end, for the front-end to display
     # once the robot has finished the discovery phase.

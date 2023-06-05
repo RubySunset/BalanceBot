@@ -29,6 +29,7 @@ class MazeBitmap:
             for j in range(self.Y_PIXELS):
                 pixel_row.append(PixelType.EMPTY)
             self.pixels.append(pixel_row)
+        self.painted_links = [] # Pairs of vertices whose links have already been painted.
     
     # Reset to initial state.
     def reset(self):
@@ -38,6 +39,7 @@ class MazeBitmap:
             for j in range(self.Y_PIXELS):
                 pixel_row.append(PixelType.EMPTY)
             self.pixels.append(pixel_row)
+        self.painted_links = []
     
     # Convert a point in metres (standard units) to pixels.
     def to_pixels(self, point):
@@ -55,15 +57,25 @@ class MazeBitmap:
     
     # Update the pixel array.
     def update_pixels(self, a_list):
-        for i in range(self.X_PIXELS):
-            for j in range(self.Y_PIXELS):
-                if self.pixels[i][j] not in (PixelType.START, PixelType.END):
-                    self.pixels[i][j] = PixelType.EMPTY # Clear the pixel array (but skip over start and end).
+        # start_time = time.time()
+        # for i in range(self.X_PIXELS):
+        #     for j in range(self.Y_PIXELS):
+        #         if self.pixels[i][j] not in (PixelType.START, PixelType.END):
+        #             self.pixels[i][j] = PixelType.EMPTY # Clear the pixel array (but skip over start and end).
         for v in a_list: # Iterate through vertices.
             for n in a_list[v]: # Iterate through neighbours.
+                if (v, n) in self.painted_links or (n, v) in self.painted_links: # If this link has already been painted.
+                    continue
+                if v == n:
+                    print('Self-link.')
+                    continue
+                self.painted_links.append((v, n))
                 p1 = self.to_pixels(v)
                 p2 = self.to_pixels(n)
-                self.pixels[p1[0]][p1[1]] = PixelType.VERTEX
+                if self.pixels[p1[0]][p1[1]] not in (PixelType.START, PixelType.END):
+                    self.pixels[p1[0]][p1[1]] = PixelType.VERTEX
+                if self.pixels[p2[0]][p2[1]] not in (PixelType.START, PixelType.END):
+                    self.pixels[p2[0]][p2[1]] = PixelType.VERTEX
                 diff = [p2[i] - p1[i] for i in range(2)] # Find the difference vector.
                 p_dist = math.ceil(math.dist(p1, p2)) # Choose the upper bound on the length of the wall.
                 unit_diff = [diff[i] / p_dist for i in range(2)] # Normalise the difference vector to get the direction.
@@ -80,11 +92,13 @@ class MazeBitmap:
                             elif math.dist(c, (j, k)) <= self.P_WIDTH/2:
                                 self.pixels[j][k] = PixelType.CLEARED # Mark this cell as cleared.
                     current = [current[i] + unit_diff[i] for i in range(2)]
+        self.prev_a_list = a_list
+        # print('Pixel array update time:', round(time.time() - start_time, 3))
     
     # Render the pixel array.
     def render_pixels(self):
-        last_time = time.time()
-        image = Image.new('RGB', (self.X_PIXELS, self.Y_PIXELS), 'white')
+        # last_time = time.time()
+        image = Image.new('RGB', (self.X_PIXELS, self.Y_PIXELS))
         img_pixels = image.load()
         for i in range(image.size[0]):
             for j in range(image.size[1]):
@@ -107,12 +121,15 @@ class MazeBitmap:
                     raise ValueError('Incorrect pixel value: ' + str(pixel) + ' at ' + str((i, j)) + '.')
                 img_pixels[i, j] = colour
         image.show()
-        print('Image rendering time:', round(time.time() - last_time, 3))
+        # print('Image rendering time:', round(time.time() - last_time, 3))
     
 if __name__ == '__main__':
     bitmap = MazeBitmap(3, 2)
     bitmap.set_start((0.3, 0.3))
     bitmap.set_end((2.7, 1.7))
-    a_list = {(0, 0): {(3, 2)}, (3, 2): {(0, 0)}}
+    # a_list = {(0.3, 0.3): {(2.7, 1.7)}, (2.7, 1.7): {(0.3, 0.3)}}
+    a_list = {(0.3, 0.3): {(1, 0.3), (0.3, 1), (1, 1)}, (1, 0.3): {(1, 1)}, (0.3, 1): {(0.3, 0.3)}}
+    bitmap.update_pixels(a_list)
+    a_list = {(0.3, 0.3): {(1, 0.3), (0.3, 1), (1, 1)}, (1, 0.3): {(1, 1)}, (0.3, 1): {(0.3, 0.3)}, (1, 1): {(0.3, 0.3), (2, 1.5)}, (2, 1.5): {(1, 1), (2.7, 1.7)}, (2.7, 1.7): {(2, 1.5)}}
     bitmap.update_pixels(a_list)
     bitmap.render_pixels()
