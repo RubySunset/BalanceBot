@@ -83,16 +83,12 @@ class MazeTracker:
                 self.marks[pos] = []
                 for i in range(len(link_angles)):
                     self.marks[pos].append(0)
-
-    # Navigate during the discovery phase using the modified Tremaux's algorithm.
-    def tremaux_navigate(self, pos, link_angles):
-
+    
+    # Find the entry link to a vertex, and apply an entry mark.
+    def entry_mark(self, pos, link_angles):
         marks = self.marks[pos]
-
         if len(marks) != len(link_angles):
             raise Exception('Current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(len(marks)) + ').')
-        
-        # Find entry angle.
         if self.prev_vertex == None: # If we are at the start.
             entry_angle = link_angles[0] # Assume we entered from a valid link, doesn't matter which one.
             entry_link = 0
@@ -106,7 +102,11 @@ class MazeTracker:
                 if abs(link_angles[i] - entry_angle) < abs(link_angles[entry_link] - entry_angle):
                     entry_link = i
             marks[entry_link] += 1 # Apply entry mark.
+        return entry_link
 
+    # Navigate during the discovery phase using the modified Tremaux's algorithm. Also apply an exit mark.
+    def tremaux_navigate(self, pos, link_angles, entry_link):
+        marks = self.marks[pos]
         # Apply Tremaux's algorithm to find the target link.
         target_link = None
         others_unmarked = True # Are all the other entrances unmarked?
@@ -132,9 +132,7 @@ class MazeTracker:
                     min_link = i
                     min_val = marks[i]
             target_link = min_link
-        
         marks[target_link] += 1 # Apply exit mark.
-
         return link_angles[target_link]
         
     # Navigate after the discovery phase using Dijkstra.

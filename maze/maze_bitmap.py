@@ -58,24 +58,18 @@ class MazeBitmap:
     # Update the pixel array.
     def update_pixels(self, a_list):
         # start_time = time.time()
-        # for i in range(self.X_PIXELS):
-        #     for j in range(self.Y_PIXELS):
-        #         if self.pixels[i][j] not in (PixelType.START, PixelType.END):
-        #             self.pixels[i][j] = PixelType.EMPTY # Clear the pixel array (but skip over start and end).
         for v in a_list: # Iterate through vertices.
             for n in a_list[v]: # Iterate through neighbours.
                 if (v, n) in self.painted_links or (n, v) in self.painted_links: # If this link has already been painted.
                     continue
                 if v == n:
-                    print('Self-link.')
-                    continue
+                    raise Exception('Self link.')
                 self.painted_links.append((v, n))
                 p1 = self.to_pixels(v)
                 p2 = self.to_pixels(n)
-                if self.pixels[p1[0]][p1[1]] not in (PixelType.START, PixelType.END):
-                    self.pixels[p1[0]][p1[1]] = PixelType.VERTEX
-                if self.pixels[p2[0]][p2[1]] not in (PixelType.START, PixelType.END):
-                    self.pixels[p2[0]][p2[1]] = PixelType.VERTEX
+                for p in (p1, p2):
+                    if self.pixels[p[0]][p[1]] not in (PixelType.START, PixelType.END):
+                        self.pixels[p[0]][p[1]] = PixelType.VERTEX
                 diff = [p2[i] - p1[i] for i in range(2)] # Find the difference vector.
                 p_dist = math.ceil(math.dist(p1, p2)) # Choose the upper bound on the length of the wall.
                 unit_diff = [diff[i] / p_dist for i in range(2)] # Normalise the difference vector to get the direction.
@@ -122,7 +116,7 @@ class MazeBitmap:
                 img_pixels[i, j] = colour
         image.show()
         # print('Image rendering time:', round(time.time() - last_time, 3))
-    
+
 if __name__ == '__main__':
     bitmap = MazeBitmap(3, 2)
     bitmap.set_start((0.3, 0.3))

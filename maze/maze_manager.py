@@ -5,14 +5,14 @@ from maze_bitmap import *
 class MazeManager:
 
     # Size of arena.
-    X_LIM = 9
-    Y_LIM = 9
+    X_LIM = 4
+    Y_LIM = 4
 
     RES = 0.1 # The resolution of the underlying grid that positions are snapped to.
     # The maximum distance between two points for them to be considered the same is RES/2.
 
     J_DIST = 0.5 # The distance we travel straight for after turning at a junction.
-    LINK_DIST = 0.1 # The distance we travel straight for after detecting a side link.
+    # LINK_DIST = 0.1 # The distance we travel straight for after detecting a side link.
 
     def __init__(self):
         self.tracker = MazeTracker()
@@ -109,16 +109,17 @@ class MazeManager:
         if not self.is_discovered: # Update external path in discovery phase.
             self.tracker.generate_partial_path(pos) # Using the continuous position is intentional here.
         
+        # Apply entry mark and check if enough of the maze has been discovered.
+        entry_link = self.tracker.entry_mark(disc_pos, link_angles)
+        if self.reached_end and not self.is_discovered and self.tracker.enough_discovered():
+            self.is_discovered = True
+            self.tracker.generate_complete_path()
+        
         # Find the target angle.
         if self.is_discovered:
             target_angle = self.tracker.dijkstra_navigate(disc_pos)
         else:
-            target_angle = self.tracker.tremaux_navigate(disc_pos, link_angles)
-            # Check if enough of the maze has been discovered.
-            if self.reached_end and not self.is_discovered and self.tracker.enough_discovered():
-                self.is_discovered = True
-                self.tracker.generate_complete_path()
-                target_angle = self.tracker.dijkstra_navigate(disc_pos)
+            target_angle = self.tracker.tremaux_navigate(disc_pos, link_angles, entry_link)
         print('Target angle:', target_angle)
 
         self.tracker.prev_vertex = disc_pos # Update previous vertex.
@@ -142,7 +143,7 @@ class MazeManager:
 if __name__ == '__main__':
     manager = MazeManager()
     manager.set_start((1, 1))
-    manager.set_end((8, 8))
+    manager.set_end((3, 3))
     while True:
         while True:
             try:
