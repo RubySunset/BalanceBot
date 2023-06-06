@@ -1,8 +1,0 @@
-s . . . . . . .
-x x x . x x x .
-. . . . x x x .
-. x x x x x x .
-. . . x x x x .
-x x . x x x x .
-. . . x x x x .
-. x . . . . . e
