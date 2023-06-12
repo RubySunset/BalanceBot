@@ -1,6 +1,6 @@
-
 #include <Wire.h>
 #include <AccelStepper.h>
+#include <MPU6050.h>
 const int STRR = 27;
 const int DIRR = 26;
 const int STRL = 25;
