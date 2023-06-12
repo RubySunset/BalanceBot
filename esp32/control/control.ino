@@ -6,7 +6,7 @@ const int DIRR = 26;
 const int STRL = 25;
 const int DIRL = 33;
 
-const int SAMPLE_TIME = 1; //sampling time in ms
+//const int SAMPLE_TIME = 1; //sampling time in ms
 
 AccelStepper s1(AccelStepper::DRIVER, STRR, DIRR); //STRR, DIRR
 AccelStepper s2(AccelStepper::DRIVER, STRL, DIRL); //STRL, DIRL
@@ -22,7 +22,8 @@ double alpha;
 
 //PID variables
 double sum_e = 0, e_n_1 = 0; //sum of errors and previous error initialisation
-double control_max = 5; //absolute maximum value of actuators
+double control_max = 10; //absolute maximum value of actuators
+double speed_max = 5;
 
 //PID Output calculation
 double simple_PID_calc(double Ts, double set_point, double sensor_point, double Kp, double Ki, double Kd){
@@ -57,6 +58,8 @@ void setSpeed(int r, int l){
 }
 
 
+
+
 void setup() {
   Serial.begin(115200);
 
@@ -77,29 +80,37 @@ void setup() {
   
   sample_time = timerBegin(0, 80, true);
   timerAttachInterrupt(sample_time, &doSample, true);
-  timerAlarmWrite(sample_time, 1000*SAMPLE_TIME, true); //sampling time in microseconds
+  timerAlarmWrite(sample_time, 2000, true); //sampling time in microseconds
   timerAlarmEnable(sample_time);
 
 }
-void loop() {
-  double speed_left = 0;
+double speed_left = 0;
   double speed_right = 0;
+  double speed_delta = 0;
+void loop() {
+  
   
   if(sample_flag == true){
     //Write sensor sampling and control code here
     mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
     theta = -gy/131; //angles in degrees/s
     alpha = gx/131;
-    integral_theta += SAMPLE_TIME/1000*theta;
+    integral_theta += 0.002*theta;
 
     //Control Code
-    double control_speed = simple_PID_calc(0.05, 0, integral_theta, -50, -30, 0);//relevant variables go here
+    double control_speed = simple_PID_calc(0.002, 0, integral_theta, 2.1, 0.05, 0.01);//relevant variables go here
+    //speed_delta = control_speed*0.06;
+    //if((speed_right += speed_delta) < speed_max){
+      //speed_right += speed_delta;
+      //speed_left += speed_delta;
+    //}
     speed_right = control_speed;
     speed_left = control_speed;
-
-    Serial.println(theta);
+    Serial.print(speed_left);
+    Serial.println(integral_theta);
     sample_flag = false;
   }
-  setSpeed(speed_right, speed_left);
+  setSpeed(speed_right*8, speed_left*8);
+//  setSpeed(0, 0);
   
 }
