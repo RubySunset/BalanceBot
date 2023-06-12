@@ -1,62 +1,76 @@
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
+
 #include <Wire.h>
+#include <AccelStepper.h>
+const int STRR = 27;
+const int DIRR = 26;
+const int STRL = 25;
+const int DIRL = 33;
 
-const int STRR = 23;
-const int DIRR = 19;
-const int STRL = 18;
-const int DIRL = 5;
+const int SAMPLE_TIME = 1; //sampling time in ms
 
+AccelStepper s1(AccelStepper::DRIVER, STRR, DIRR); //STRR, DIRR
+AccelStepper s2(AccelStepper::DRIVER, STRL, DIRL); //STRL, DIRL
 
-Adafruit_MPU6050 mpu;
+MPU6050 mpu;
 
-
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
 
 double theta;
+double integral_theta = 0;
 double alpha;
 
-void setup(){
-  Serial.begin(115200);  
-  ledcSetup(1, 100, 10);
-  ledcAttachPin(STRR, 1);
-  ledcWrite(1, 127);
-  ledcSetup(2, 100, 10);
-  ledcAttachPin(STRL, 2);
-  ledcWrite(2, 127);
-  mpu.begin();
-  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-}
+bool sample_flag = false;
+hw_timer_t *sample_time = NULL;
 
-void loop(){
-//sensor data in rad/s
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-  theta = -g.gyro.y; //tilt forward = positive
-  alpha = g.gyro.x; //rotate right = positive
-  Serial.println(theta);
-
-//sets speed of motors, in rad/s
-  setSpeed(2, 2);
-
-//to simulate sampling time, motor doesn't work well for 0.1s for now
-  delay(100);
-
+void IRAM_ATTR doSample(){
+  sample_flag = true;
 }
 
 void setSpeed(int r, int l){
-  if(r < 0){
-    digitalWrite(DIRR, HIGH); //opposite direction as the left motor
+ s1.setSpeed(r*100/PI);
+ s2.setSpeed(-l*100/PI);
+ s1.runSpeed();
+ s2.runSpeed();
+}
+
+
+void setup() {
+  Serial.begin(115200);
+
+  Wire.begin();
+  mpu.initialize();
+  Serial.println(mpu.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
+  mpu.setXAccelOffset(-896);
+  mpu.setYAccelOffset(-838);
+  mpu.setZAccelOffset(1139);
+  mpu.setXGyroOffset(88);
+  mpu.setYGyroOffset(-48);
+  mpu.setZGyroOffset(19);
+    
+  pinMode(DIRR, OUTPUT);
+  pinMode(DIRL, OUTPUT);
+  s1.setMaxSpeed(700);
+  s2.setMaxSpeed(700);
+  
+  sample_time = timerBegin(0, 80, true);
+  timerAttachInterrupt(sample_time, &doSample, true);
+  timerAlarmWrite(sample_time, 1000*SAMPLE_TIME, true); //sampling time in microseconds
+  timerAlarmEnable(sample_time);
+
+}
+void loop() {
+  
+  if(sample_flag == true){
+    //Write sensor sampling and control code here
+    mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    theta = -gy/131; //angles in degrees/s
+    alpha = gx/131;
+    integral_theta += SAMPLE_TIME/1000*theta;
+
+    Serial.println(theta);
+    sample_flag = false;
   }
-  if(r > 0){
-    digitalWrite(DIRR, LOW);
-  }
-  if(l < 0){
-    digitalWrite(DIRL, LOW);
-  }
-  if(l > 0){
-    digitalWrite(DIRL, HIGH);
-  }
-  ledcChangeFrequency(1, r*100/PI, 10);
-  ledcChangeFrequency(2, l*100/PI, 10);
+  setSpeed(3, 4);
+  
 }
