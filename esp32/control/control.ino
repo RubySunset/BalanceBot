@@ -20,6 +20,28 @@ double theta;
 double integral_theta = 0;
 double alpha;
 
+//PID variables
+double sum_e = 0, e_n_1 = 0; //sum of errors and previous error initialisation
+double control_max = 5; //absolute maximum value of actuators
+
+//PID Output calculation
+double simple_PID_calc(double Ts, double set_point, double sensor_point, double Kp, double Ki, double Kd){
+  //variable finding
+  double e = set_point - sensor_point; //current error for proportional term [1]
+  sum_e += e; //cumulative error for sum term [2]
+  double differential_e = e - e_n_1; //delta error for differential term [3]
+  
+  //output setting
+  double control_input = Kp*e + Ki*Ts*sum_e + Kd*(1/Ts)*differential_e; //control law
+  if(abs(control_input) >= control_max) control_input = control_max * abs(control_input)/control_input; //in case motor limit reached
+  
+  //incrementing
+  e_n_1 = e;
+  
+  //return
+  return control_input;
+}
+
 bool sample_flag = false;
 hw_timer_t *sample_time = NULL;
 
@@ -60,6 +82,8 @@ void setup() {
 
 }
 void loop() {
+  double speed_left = 0;
+  double speed_right = 0;
   
   if(sample_flag == true){
     //Write sensor sampling and control code here
@@ -68,9 +92,14 @@ void loop() {
     alpha = gx/131;
     integral_theta += SAMPLE_TIME/1000*theta;
 
+    //Control Code
+    double control_speed = simple_PID_calc(0.05, 0, integral_theta, -50, -30, 0);//relevant variables go here
+    speed_right = control_speed;
+    speed_left = control_speed;
+
     Serial.println(theta);
     sample_flag = false;
   }
-  setSpeed(3, 4);
+  setSpeed(speed_right, speed_left);
   
 }
