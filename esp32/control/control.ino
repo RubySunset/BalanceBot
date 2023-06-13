@@ -17,7 +17,7 @@ int16_t ax, ay, az;
 int16_t gx, gy, gz;
 
 double theta;
-double integral_theta = 0;
+double integral_theta;
 double alpha;
 
 //PID variables
@@ -57,7 +57,15 @@ void setSpeed(int r, int l){
  s2.runSpeed();
 }
 
-
+double calibrateMPU(){
+  double compl_theta = 0;
+  for(int i = 0; i < 1000; i++){
+    mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    compl_theta = 0.98*(compl_theta+gy*0.002/131)+0.02*atan2(ax,az)*RAD_TO_DEG;
+    delay(2);
+  }
+  return compl_theta + 89.5;
+}
 
 
 void setup() {
@@ -83,10 +91,14 @@ void setup() {
   timerAlarmWrite(sample_time, 2000, true); //sampling time in microseconds
   timerAlarmEnable(sample_time);
 
+//  integral_theta = calibrateMPU();
+integral_theta = 0;
+
 }
 double speed_left = 0;
   double speed_right = 0;
   double speed_delta = 0;
+  
 void loop() {
   
   
@@ -96,6 +108,7 @@ void loop() {
     theta = -gy/131; //angles in degrees/s
     alpha = gx/131;
     integral_theta += 0.002*theta;
+//    compl_theta = 0.98*(compl_theta+gy*0.002/131)+0.02*atan2(ax,az)*RAD_TO_DEG;
 
     //Control Code
     double control_speed = simple_PID_calc(0.002, 0, integral_theta, 2.1, 0.05, 0.01);//relevant variables go here
@@ -106,7 +119,11 @@ void loop() {
     //}
     speed_right = control_speed;
     speed_left = control_speed;
-    Serial.print(speed_left);
+//    Serial.print(speed_left);
+//    Serial.print(compl_theta+90);
+    Serial.print("  ");
+    Serial.print(theta);
+    Serial.print("  ");
     Serial.println(integral_theta);
     sample_flag = false;
   }
