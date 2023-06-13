@@ -1,0 +1,44 @@
+wire [7:0] hue, value, saturation, cmin;
+
+if (green>blue)
+	begin
+	if (red > green)
+		begin
+		assign value = red
+		assign cmin = blue
+		end
+	else
+		begin
+		assign value = green
+		if (red > blue)
+			assign cmin = blue
+		else
+			assign cmin = red
+		end
+	end
+else
+	begin
+	if (red > blue)
+		begin
+		assign value = red
+		assign cmin = green
+		end
+	else
+		begin
+		assign value = blue
+		if (red > green)
+			assign cmin = green
+		else
+			assign cmin = red
+		end
+	end
+
+
+assign saturation = ((value - cmin) * 100 ))/ 250
+
+if (value==green)
+	assign hue = (30*(blue - red) + 60*(value - cmin))/(value - cmin)
+else if (value==blue)
+	assign hue = (30*(red - green) + 120*(value - cmin))/(value - cmin)
+else
+	assign hue = (30*((green - blue)%6))/(value - cmin)
