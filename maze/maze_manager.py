@@ -5,14 +5,15 @@ from maze_bitmap import *
 class MazeManager:
 
     # Size of arena.
-    X_LIM = 4
-    Y_LIM = 4
+    X_LIM = 3
+    Y_LIM = 2
 
-    RES = 0.1 # The resolution of the underlying grid that positions are snapped to.
+    RES = 0.25 # The resolution of the underlying grid that positions are snapped to.
     # The maximum distance between two points for them to be considered the same is RES/2.
 
-    J_DIST = 0.5 # The distance we travel straight for after turning at a junction.
-    # LINK_DIST = 0.1 # The distance we travel straight for after detecting a side link.
+    # J_DIST = 0.3 # The distance we travel straight for after turning at a junction.
+    LINK_DIST = 0.18 # The distance we travel straight for after detecting a side link.
+    FORCE_DIST = 0.05 # The distance we continue to force straight for after detecting a corridor.
 
     def __init__(self):
         self.tracker = MazeTracker()
@@ -20,6 +21,11 @@ class MazeManager:
         self.reached_end = False # Have we reached the end?
         self.is_discovered = False # Have we discovered enough of the maze to find the shortest path?
         self.reverse_mode = False # Is the robot in reverse mode?
+        self.temp_pos = None
+        self.is_link_delay = False # Are we delaying the detection of a junction via a side link?
+        self.foo_pos = None
+        self.is_force_delay = False # Are we delaying stopping forcing straight after a junction?
+        self.is_forcing = False # Are we forcing straight after a junction?
     
     # Reset to the initial state.
     def reset(self):
@@ -28,6 +34,9 @@ class MazeManager:
         self.reached_end = False
         self.is_discovered = False
         self.reverse_mode = False
+        self.temp_pos = None
+        self.is_link_delay = False
+        self.is_forcing = False
     
     # Discretise a point to fit it to the grid. Also force it into the arena if it is out of bounds.
     def discretise_point(self, point):
@@ -70,16 +79,52 @@ class MazeManager:
                 r_light.append(light[(i + 2) % 4])
         else:
             r_light = light
+        
+        # Test if we can stop forcing straight.
+        if self.is_forcing and not self.is_force_delay and r_light[1] and r_light[3]:
+            self.is_force_delay = True
+            self.foo_pos = pos # Use continuous position.
+            print('Start force delay at', pos)
+        elif self.is_forcing and self.is_force_delay and math.dist(self.foo_pos, pos) >= self.FORCE_DIST:
+            self.is_forcing = False
+            self.is_force_delay = False
+            self.foo_pos = None
+            print('Stop forcing straight.')
 
+        # if math.dist(pos, self.tracker.end) <= self.RES/2: # If we have reached the end, maybe?
+        #     print('Possibly reached end.')
+        #     return 'j'
         if r_light[0]: # Maze boundary in front.
+            if self.is_link_delay: # Reset link delay if one was active.
+                self.is_link_delay = False
+                self.temp_pos = None
+                print('Reset link delay.')
+            if self.is_force_delay: # Reset force delay if one was active.
+                self.is_force_delay = False
+                self.foo_pos = None
+                print('Reset force delay.')
             print('Boundary ahead - junction.')
             return 'j'
-        elif math.dist(pos, self.tracker.prev_vertex) < self.J_DIST: # Force straight after junction.
-            return None
-        elif not r_light[1] or not r_light[3]: # Reached junction.
-            print('Link to side - junction.')
-            return 'j'
+        # elif math.dist(pos, self.tracker.prev_vertex) < self.J_DIST: # Force straight after junction.
+        #     return None
+        elif not self.is_forcing and (not r_light[1] or not r_light[3]): # Reached junction.
+            if not self.is_link_delay:
+                self.is_link_delay = True
+                self.temp_pos = pos # Use continuous position.
+                print('Start link delay at', pos)
+                return None
+            elif math.dist(self.temp_pos, pos) >= self.LINK_DIST:
+                self.is_link_delay = False
+                self.temp_pos = None
+                print('Link to side - junction.')
+                return 'j'
+            else:
+                return None
         else: # Default: in a corridor.
+            if self.is_link_delay: # Abandon a link delay if there is one.
+                self.is_link_delay = False
+                self.temp_pos = None
+                print('Abandon link delay.')
             return None
 
     # Generate a navigation command after a junction has been mapped.
@@ -92,11 +137,24 @@ class MazeManager:
             r_angle = (angle + 180) % 360
         else:
             r_angle = angle
+        
+        # Rearrange link angles to have the first be closest to north.
+        closest_index = 0
+        closest_dist = math.inf
+        for i in range(len(link_angles)):
+            if self.tracker.mod_diff(link_angles[i], 0, 360) < closest_dist:
+                closest_index = i
+                closest_dist = self.tracker.mod_diff(link_angles[i], 0, 360)
+        temp = []
+        for i in range(len(link_angles)):
+            temp.append(link_angles[(i + closest_index) % len(link_angles)])
+        link_angles = temp
+        print(link_angles)
 
         disc_pos = self.discretise_point(pos)
 
         # Check if we've reached the end.
-        if math.dist(pos, self.tracker.end) <= self.RES/2:
+        if disc_pos == self.tracker.end:
             self.reached_end = True
             print('End reached.')
             if self.is_discovered:
@@ -117,12 +175,17 @@ class MazeManager:
         
         # Find the target angle.
         if self.is_discovered:
-            target_angle = self.tracker.dijkstra_navigate(disc_pos)
+            if disc_pos == self.tracker.end:
+                print('Finished.')
+                return 'e'
+            else:
+                target_angle = self.tracker.dijkstra_navigate(disc_pos)
         else:
             target_angle = self.tracker.tremaux_navigate(disc_pos, link_angles, entry_link)
         print('Target angle:', target_angle)
 
         self.tracker.prev_vertex = disc_pos # Update previous vertex.
+        self.is_forcing = True # Force straight after reaching a junction (and turning).
         
         # Generate navigation command.
         diff = (target_angle - r_angle) % 360 # [0, 360]

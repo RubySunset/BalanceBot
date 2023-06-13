@@ -22,6 +22,14 @@ class MazeTracker:
         self.end = None
         self.external_path = []
     
+    # Finds the difference between two numbers in modular arithmetic.
+    def mod_diff(self, a, b, mod):
+        diff = abs(a - b)
+        if diff < mod/2:
+            return diff
+        else:
+            return mod - diff
+    
     # Set a starting point.
     def set_start(self, pos):
         self.start = pos
@@ -69,6 +77,7 @@ class MazeTracker:
     # Visit a vertex, updating the relevant graph structures.
     # Assume all angles are taken clockwise from north in the range [0, 360].
     def visit_vertex(self, pos, link_angles):
+        
         if self.prev_vertex == None: # If we are at the start.
             self.a_list[pos] = set()
             self.marks[pos] = []
@@ -99,7 +108,7 @@ class MazeTracker:
             # Find the link corresponding to the entry angle.
             entry_link = 0
             for i in range(len(link_angles)):
-                if abs(link_angles[i] - entry_angle) < abs(link_angles[entry_link] - entry_angle):
+                if self.mod_diff(link_angles[i], entry_angle, 360) < self.mod_diff(link_angles[entry_link], entry_angle, 360):
                     entry_link = i
             marks[entry_link] += 1 # Apply entry mark.
         return entry_link
