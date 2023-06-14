@@ -126,6 +126,7 @@ end
 reg [10:0] x_min_r, y_min_r, x_max_r, y_max_r;
 reg [10:0] x_min_b, y_min_b, x_max_b, y_max_b;
 reg [10:0] x_min_y, y_min_y, x_max_y, y_max_y;
+
 always@(posedge clk) begin
 	if (red_detect & in_valid) begin	//Update bounds when the pixel is red
 		if (x < x_min_r) x_min_r <= x;
@@ -158,11 +159,26 @@ always@(posedge clk) begin
 		x_max_y <= 0;
 		y_min_y <= IMAGE_H-11'h1;
 		y_max_y <= 0;
+
 	end
 end
 
+// reg[10:0] buffer_count;
+reg[639:0] buffer;
+`define Y_LEVEL 400
+
+always@(posedge clk) begin
+	// if (sop & in_valid) buffer_count <= 0;
+	if (in_valid & (y == `Y_LEVEL)) begin
+		buffer[x] <= red[7] & green[7] & blue[7];
+		// buffer[buffer_count] <= red[7] & green[7] & blue[7];
+		// buffer_count <= buffer_count + 1;
+	end
+
+end
+
 //Process bounding box at the end of the frame.
-reg [2:0] msg_state;
+reg [3:0] msg_state;
 reg [10:0] left, right, top, bottom;
 reg [7:0] frame_count;
 always@(posedge clk) begin
@@ -178,14 +194,14 @@ always@(posedge clk) begin
 		//Start message writer FSM once every MSG_INTERVAL frames, if there is room in the FIFO
 		frame_count <= frame_count - 1;
 		
-		if (frame_count == 0 && msg_buf_size < MESSAGE_BUF_MAX - 7) begin
-			msg_state <= 3'b001;
+		if (frame_count == 0 && msg_buf_size < MESSAGE_BUF_MAX - 27) begin
+			msg_state <= 4'b0001;
 			frame_count <= MSG_INTERVAL-1;
 		end
 	end
 	
 	//Cycle through message writer states once started
-	if (msg_state != 3'b000) msg_state <= msg_state + 3'b001;
+	if (msg_state != 4'b0000) msg_state <= msg_state + 4'b0001;
 
 end
 	
@@ -197,41 +213,52 @@ wire msg_buf_rd, msg_buf_flush;
 wire [7:0] msg_buf_size;
 wire msg_buf_empty;
 
-`define START_MSG_ID "RBB"
+reg [4:0] row_count;
+
+`define START_MSG_ID "RBY"
 
 always@(*) begin	//Write words to FIFO as state machine advances
 	case(msg_state)
-		3'b000: begin
+		4'b0000: begin
 			msg_buf_in = 32'b0;
 			msg_buf_wr = 1'b0;
 		end
-		3'b001: begin
+		4'b0001: begin
 			msg_buf_in = `START_MSG_ID;	//Message ID
 			msg_buf_wr = 1'b1;
 		end
-		3'b010: begin
+		4'b0010: begin
 			msg_buf_in = {5'b0, x_min_r, 5'b0, y_min_r};	//Top left coordinate
 			msg_buf_wr = 1'b1;
 		end
-		3'b011: begin
+		4'b0011: begin
 			msg_buf_in = {5'b0, x_max_r, 5'b0, y_max_r}; //Bottom right coordinate
 			msg_buf_wr = 1'b1;
 		end
-		3'b100: begin
+		4'b0100: begin
 			msg_buf_in = {5'b0, x_min_b, 5'b0, y_min_b};	//Top left coordinate
 			msg_buf_wr = 1'b1;
 		end
-		3'b101: begin
+		4'b0101: begin
 			msg_buf_in = {5'b0, x_max_b, 5'b0, y_max_b}; //Bottom right coordinate
 			msg_buf_wr = 1'b1;
 		end
-		3'b110: begin
+		4'b0110: begin
 			msg_buf_in = {5'b0, x_min_y, 5'b0, y_min_y};	//Top left coordinate
 			msg_buf_wr = 1'b1;
 		end
-		3'b111: begin
+		4'b0111: begin
 			msg_buf_in = {5'b0, x_max_y, 5'b0, y_max_y}; //Bottom right coordinate
 			msg_buf_wr = 1'b1;
+			row_count <= 0;
+		end
+		4'b1000: begin
+			if (row_count < 21) begin
+				msg_buf_in = buffer[row_count*32 +: 32];
+				msg_buf_wr = 1'b1;
+				row_count <= row_count + 1;
+			end
+			else msg_state <= 4'b0000;
 		end
 	endcase
 end
