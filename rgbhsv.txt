@@ -41,4 +41,7 @@ if (value==green)
 else if (value==blue)
 	assign hue = (30*(red - green) + 120*(value - cmin))/(value - cmin)
 else
-	assign hue = (30*((green - blue)%6))/(value - cmin)
+	if (blue > green)
+		assign hue = (180*(value - cmin) - 30*(blue - green))/(value - cmin)
+	else
+		assign hue = (30*(green - blue))/(value - cmin)
