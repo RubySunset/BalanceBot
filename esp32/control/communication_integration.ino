@@ -94,6 +94,7 @@ const char *WIFI_PASS = "Ajanthan";
 const int BUFFER_SIZE = 28;
 char buf[BUFFER_SIZE + 1];
 char hexBuf[BUFFER_SIZE * 2 + 1];
+char LDR_chars[2+1];
 
 TaskHandle_t Task2;
 
@@ -165,7 +166,7 @@ void setup() {
   Serial.println("Connected to WiFi");
 
   // server address, port and URL
-  webSocket.begin("192.168.87.115", 8000, "/ws/rover");
+  webSocket.begin("18.133.227.0", 8000, "/ws/rover");
 
   // event handler
 	webSocket.onEvent(webSocketEvent);
@@ -208,7 +209,7 @@ void loop() {
     //-----CONTROL-----//
     
     //Movement control- outer loop changes theta setpoint slightly, but only when theta is decently small
-    if(abs(integral_theta) > 0.5){
+    if((abs(integral_theta) > 0.5)&&(STABILITY_MODE == false)){
       velocity_setpoint = 0;
     }
     if(movement_mode == 'm'){
@@ -218,7 +219,7 @@ void loop() {
 
     double control_speed;
     //Theta control- always necessary, present in both of other modes too
-    if(STABILITY_MODE = false){ //balances if no stabilisers
+    if(STABILITY_MODE == false){ //balances if no stabilisers
       control_speed = simple_PID_calc(0.002, theta_setpoint, integral_theta, 0, 2.13, 0.053, 0.0102); //0, 2.13, 0.05, 0.01);
     }
     else{
@@ -249,7 +250,6 @@ void Task2Code(void* pvParameters) {
   while(true){
     //Serial.println("in task 2");
     webSocket.loop();
-  }
   // if (Serial.available() >= BUFFER_SIZE) {
   //   // read incoming bytes
   //   int rlen = Serial.readBytes(buf, BUFFER_SIZE);
@@ -260,25 +260,27 @@ void Task2Code(void* pvParameters) {
   //   }
   //   hexBuf[rlen * 2] = '\0';  // null-terminate the hex string
 
-  //   // send beacon every half second
-  //   static unsigned long lastSendMillis = 0;
-  //   if (millis() - lastSendMillis > 500) { 
-  //     lastSendMillis = millis();
-
-  //     // JSON doc fixed memory allocation on stack
-  //     StaticJsonDocument<256> doc;
-  //     doc["type"] = "Beacons";
-  //     doc["time"] = millis();
+    // send beacon every half second
+    static unsigned long lastSendMillis = 0;
+    if (millis() - lastSendMillis > 200) { 
+      lastSendMillis = millis();
+      LDR_chars[0] = (char)L;
+      LDR_chars[1] = (char)R;
+      LDR_chars[2] = '\0';
+      // JSON doc fixed memory allocation on stack
+      StaticJsonDocument<128> doc;
+      doc["type"] = "sensor";
+      doc["time"] = millis();
       
-  //     // store the hexadecimal string in the JSON document
-  //     doc["content"] = hexBuf;
+      // store the hexadecimal string in the JSON document
+      doc["LDR"] = LDR_chars;
 
-  //     char message[256];
-  //     serializeJson(doc, message, sizeof(message));
-  //     Serial.println(message);
-  //     webSocket.sendTXT(message);
-  //   }
-  //}
+      char message[128];
+      serializeJson(doc, message, sizeof(message));
+      // Serial.println(message);
+      webSocket.sendTXT(message);
+    }
+  }
 }
 
 void handleReceivedText(char* payload) {
@@ -336,6 +338,14 @@ void handleMovement(const char* message, double value) {
     Serial.println(L); //left LDR
     Serial.println(R); //right LDR
     Serial.println(integral_alpha); //angle
+  }
+  if(strcmp(message, "print values") == 0){
+    Serial.println("Stability mode value");
+    Serial.println(STABILITY_MODE);
+    Serial.println("Velocity setpoint");
+    Serial.println(velocity_setpoint);
+    Serial.println("theta value");
+    Serial.println(integral_theta);
   }
   Serial.println(message);
 }
