@@ -6,7 +6,20 @@
 #include <AccelStepper.h>
 #include <MPU6050.h>
 
+///-----LIGHT SENSORS-----///
+#define F1 27
+#define F2 26
+#define F3 25
+#define B1 33
+#define B2 14
+#define B3 4
+#define L 15
+#define R 2
+///-----LIGHT SENSORS-----///
+
 ///-----CONTROL----///
+bool STABILITY_MODE = true; //IF STABILITY MODE IS ON, STABILISING FRAME ATTACHED TO ROBOT
+
 const int STRR = 27;
 const int DIRR = 26;
 const int STRL = 25;
@@ -202,9 +215,15 @@ void loop() {
       //theta_setpoint = simple_PID_calc(0.02, velocity_setpoint, integral_az, 0.1, 1, 0, 0.01);
       //theta_setpoint = simple_PID_calc(0.02, velocity_setpoint, az, 1, 1, 0, 0); //this version is actually an acceleration setpoint
     }
-  
+
+    double control_speed;
     //Theta control- always necessary, present in both of other modes too
-    double control_speed = simple_PID_calc(0.002, theta_setpoint, integral_theta, 0, 2.13, 0.053, 0.0102); //0, 2.13, 0.05, 0.01);
+    if(STABILITY_MODE = false){ //balances if no stabilisers
+      control_speed = simple_PID_calc(0.002, theta_setpoint, integral_theta, 0, 2.13, 0.053, 0.0102); //0, 2.13, 0.05, 0.01);
+    }
+    else{
+      control_speed = velocity_setpoint;
+    }
     //if(movement_mode == 'm') control_speed += 0.05;
     speed_right = control_speed;
     speed_left = control_speed;
@@ -289,6 +308,34 @@ void handleMovement(const char* message, double value) {
   if(strcmp(message, "turn") == 0){
     movement_mode = 't';
     angle_setpoint = value;
+  }
+  if(strcmp(message, "stabiliser") == 0){
+    STABILITY_MODE = !STABILITY_MODE;
+  }
+  if(strcmp(message, "move") == 0){
+    movement_mode = 'm';
+    velocity_setpoint = 1;
+  }
+  if(strcmp(message, "stop") == 0){
+    movement_mode = 'm';
+    velocity_setpoint = 0;
+  }
+  if(strcmp(message, "sense") == 0){
+    Serial.println(" L: ");
+    Serial.println(analogRead(L));
+    Serial.println(" R: ");
+    Serial.println(analogRead(R));
+  }
+  if(strcmp(message, "read angle") == 0){
+    Serial.println("Currently facing:");
+    Serial.println(integral_alpha);
+  }
+  if(strcmp(message, "read data") == 0){
+    //Send back position, light sensors, angle
+    Serial.println("Position not yet available"); //position
+    Serial.println(L); //left LDR
+    Serial.println(R); //right LDR
+    Serial.println(integral_alpha); //angle
   }
   Serial.println(message);
 }
