@@ -1,5 +1,6 @@
 from maze_tracker import *
 from maze_bitmap import *
+from beacon_tri import *
 
 # Main class. Instantiate and use in other modules.
 class MazeManager:
@@ -18,6 +19,7 @@ class MazeManager:
     def __init__(self):
         self.tracker = MazeTracker()
         self.bitmap = MazeBitmap(self.X_LIM, self.Y_LIM)
+        self.beacon_tri = BeaconTri(self.X_LIM, self.Y_LIM)
         self.reached_end = False # Have we reached the end?
         self.is_discovered = False # Have we discovered enough of the maze to find the shortest path?
         self.reverse_mode = False # Is the robot in reverse mode?
@@ -31,6 +33,7 @@ class MazeManager:
     def reset(self):
         self.tracker.reset()
         self.bitmap.reset()
+        self.beacon_tri.reset()
         self.reached_end = False
         self.is_discovered = False
         self.reverse_mode = False
@@ -66,6 +69,10 @@ class MazeManager:
         pos = self.discretise_point(raw_pos)
         self.tracker.set_end(pos)
         self.bitmap.set_end(pos)
+    
+    # Set the beacon positions.
+    def set_beacons(self, beacon_pos):
+        self.beacon_tri.set_beacons(beacon_pos)
     
     # Process sensor data from the robot to generate the next command.
     # Angle is given in degrees starting clockwise from north, [0, 360].
@@ -133,7 +140,11 @@ class MazeManager:
     # Generate a navigation command after a junction has been mapped.
     # Assume input angles are taken in degrees clockwise from north, [0, 360].
     # Assume output angles are taken in degrees clockwise from north, [-180, 180].
-    def junction_navigate(self, pos, angle, link_angles):
+    # Position can be given instead of using triangulation, for debugging.
+    def junction_navigate(self, alpha, beta, gamma, angle, link_angles, pos=None):
+
+        if pos == None:
+            pos = self.beacon_tri.find_pos(alpha, beta, gamma)
 
         # Translate angle to forwards/reverse-relative form.
         if self.reverse_mode:

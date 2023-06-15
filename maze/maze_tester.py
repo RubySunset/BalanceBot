@@ -183,6 +183,7 @@ start = (0.25, 0.25)
 manager.set_start(start)
 end = (2.75, 1.75)
 manager.set_end(end)
+manager.set_beacons([(0, 0), (3, 0), (0, 3)])
 
 # Initialise robot.
 pos = [start[0], start[1]] # Assume robot is initially at start position.
@@ -300,7 +301,20 @@ while True:
             link_angles.append(current_angle)
 
         print('Link angles:', link_angles)
-        command = manager.junction_navigate((pos[0], pos[1]), angle, link_angles)
+
+        # Simulate angles for triangulation.
+        beacon_dist = []
+        for i in range(3):
+            beacon_dist.append(math.dist(pos, manager.beacon_tri.beacon_pos[i]))
+        beacon_angles = []
+        pairs = ((0, 1), (0, 2), (1, 2))
+        for pair in pairs:
+            a = math.dist(manager.beacon_tri.beacon_pos[pair[0]], manager.beacon_tri.beacon_pos[pair[1]])
+            b = beacon_dist[pair[0]]
+            c = beacon_dist[pair[1]]
+            beacon_angles.append(math.degrees(math.acos((b**2 + c**2 - a**2)/(2*b*c))))
+
+        command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], angle, link_angles)
         if command[0] == 'e':
             print('Reached end.')
             break
