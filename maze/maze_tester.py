@@ -14,7 +14,19 @@ SCAN_RES = 64 # The number of vectors we consider in a junction scan.
 # Course-correction controller parameters.
 P_CC = 0.3 # Course correction proportional gain.
 I_CC = 0.0001 # Course correction integral gain.
-D_CC = 0.3 # Course correction derivative gain.
+D_CC = 0.5 # Course correction derivative gain.
+MAX_OFFSET = 10 # The maximum amount of course-correction that can be applied, in degrees.
+UNBOUND_DIST = 0.5 # The distance for which unbounded CC is applied.
+
+# Course-correction controller variables.
+cc_active = False
+cc_sum = 0
+cc_prev = 0
+cc_prev_left_dist = 0
+cc_prev_right_dist = 0
+cc_prev_width = 0
+cc_offset = 0
+cc_prev_vertex = None
 
 # Other parameters.
 PIXEL_RES = 0.01 # Metres/pixel
@@ -74,43 +86,67 @@ walls.append(((X_LIM, 0), (X_LIM, Y_LIM)))
 walls.append(((0, Y_LIM), (X_LIM, Y_LIM)))
 walls.append(((0, 0), (0, Y_LIM)))
 
-# Add all other walls (1).
-# walls.append(((0.5, 0), (0.5, 1.5)))
-# walls.append(((1, 2), (1.5, 1.5)))
-# walls.append(((2, 1), (2.5, 0.5)))
-# walls.append(((1, 0.5), (2, 0.5)))
-# walls.append(((1, 1), (1.5, 1)))
-# walls.append(((2, 0.5), (2, 1)))
-# walls.append(((1.5, 1), (1.5, 1.5)))
-# walls.append(((3, 1), (2.5, 1.5)))
-# walls.append(((2, 1.5), (2.5, 1.5)))
+def config1():
+    walls.append(((0.5, 0), (0.5, 1.5)))
+    walls.append(((1, 2), (1.5, 1.5)))
+    walls.append(((2, 1), (2.5, 0.5)))
+    walls.append(((1, 0.5), (2, 0.5)))
+    walls.append(((1, 1), (1.5, 1)))
+    walls.append(((2, 0.5), (2, 1)))
+    walls.append(((1.5, 1), (1.5, 1.5)))
+    walls.append(((3, 1), (2.5, 1.5)))
+    walls.append(((2, 1.5), (2.5, 1.5)))
 
-# Add all other walls (2).
-# walls.append(((0.5, 0), (0.5, 1.5)))
-# walls.append(((1, 2), (1, 0.5)))
-# walls.append(((1.5, 0), (1.5, 1.5)))
-# walls.append(((2, 2), (2, 0.5)))
-# walls.append(((2, 0.5), (2.5, 0.5)))
-# walls.append(((2.5, 0.5), (2.5, 2)))
+def config2():
+    walls.append(((0.5, 0), (0.5, 1.5)))
+    walls.append(((1, 2), (1, 0.5)))
+    walls.append(((1.5, 0), (1.5, 1.5)))
+    walls.append(((2, 2), (2, 0.5)))
+    walls.append(((2, 0.5), (2.5, 0.5)))
+    walls.append(((2.5, 0.5), (2.5, 2)))
 
-# Add all other walls (3).
-walls.append(((0.5, 0), (0.5, 1.5)))
-walls.append(((1, 0.5), (1, 1.5)))
-walls.append(((1, 0.5), (2.5, 0.5)))
-walls.append(((1, 1.5), (2.5, 1.5)))
-walls.append(((1.5, 1), (2.5, 1)))
-walls.append(((2.5, 1.5), (2.5, 2)))
+def config3():
+    walls.append(((0.5, 0), (0.5, 1.5)))
+    walls.append(((1, 0.5), (1, 1.5)))
+    walls.append(((1, 0.5), (2.5, 0.5)))
+    walls.append(((1, 1.5), (2.5, 1.5)))
+    walls.append(((1.5, 1), (2.5, 1)))
+    walls.append(((2.5, 1.5), (2.5, 2)))
 
-# Add all other walls (4).
-# walls.append(((0.5, 0), (0.5, 1.5)))
-# walls.append(((0.5, 1.5), (1, 1.5)))
-# walls.append(((1, 0.5), (1, 1)))
-# walls.append(((1, 0.5), (2.5, 0.5)))
-# walls.append(((2.5, 0.5), (2.5, 1)))
-# walls.append(((2.5, 1.5), (2.5, 2)))
-# walls.append(((1.5, 1.5), (2.5, 1.5)))
-# walls.append(((1.5, 1), (2, 1)))
-# walls.append(((2, 1), (2, 1.5)))
+def config4():
+    walls.append(((0.5, 0), (0.5, 1.5)))
+    walls.append(((0.5, 1.5), (1, 1.5)))
+    walls.append(((1, 0.5), (1, 1)))
+    walls.append(((1, 0.5), (2.5, 0.5)))
+    walls.append(((2.5, 0.5), (2.5, 1)))
+    walls.append(((2.5, 1.5), (2.5, 2)))
+    walls.append(((1.5, 1.5), (2.5, 1.5)))
+    walls.append(((1.5, 1), (2, 1)))
+    walls.append(((2, 1), (2, 1.5)))
+
+def config5():
+    walls.append(((0.5, 0.5), (0.5, 1)))
+    walls.append(((0.5, 1), (1, 1)))
+    walls.append(((0.5, 1.5), (1, 1.5)))
+    walls.append(((1, 0.5), (1.5, 0.5)))
+    walls.append(((1.5, 0.5), (1.5, 1)))
+    walls.append(((1.5, 1.5), (2, 1.5)))
+    walls.append(((2, 1), (2, 1.5)))
+    walls.append(((2, 0.5), (2.5, 0.5)))
+    walls.append(((2.5, 0.5), (2.5, 1)))
+    walls.append(((2.5, 1.5), (3, 1.5)))
+
+def config6():
+    walls.append(((0.5, 0), (0.5, 1.5)))
+    walls.append(((0.5, 1.5), (2.5, 0)))
+    walls.append(((0.5, 2), (1.5, 1.25)))
+    walls.append(((1.5, 1.25), (1.5, 2)))
+    walls.append(((2, 1), (2.5, 0.5)))
+    walls.append(((2, 1), (2, 1.5)))
+    walls.append(((2.5, 0.5), (2.5, 1.5)))
+    walls.append(((2, 1.5), (2.5, 1.5)))
+
+config5()
 
 pixels = []
 for i in range(X_PIXELS):
@@ -158,12 +194,7 @@ reverse_mode = False # Whether or not the robot is going in reverse.
 robot_path = []
 
 iterations = 0
-cc_active = False
-cc_sum = 0
-cc_prev = None
-cc_prev_left_dist = None
-cc_prev_right_dist = None
-cc_prev_width = None
+
 while True:
 
     # Check for timeout.
@@ -209,6 +240,7 @@ while True:
     if command == 'j':
 
         print('Junction position:', pos)
+        cc_prev_vertex = pos
 
         # loci = []
         # for i in range(8):
@@ -282,24 +314,26 @@ while True:
         angle += rotation # Apply rotation instantaneously.
     
     # Apply course correction.
-    closest_left = (math.inf, math.inf)
-    closest_right = (math.inf, math.inf)
-    if reverse_mode:
-        r_angle = (angle + 180) % 360
-    else:
-        r_angle = angle
-    for i in range(max(0, math.floor(ppos[0] - 0.5/PIXEL_RES)), min(math.ceil(ppos[0] + 0.5/PIXEL_RES) + 1, X_PIXELS)):
-        for j in range(max(0, math.floor(ppos[1] - 0.5/PIXEL_RES)), min(math.ceil(ppos[1] + 0.5/PIXEL_RES) + 1, Y_PIXELS)):
-            if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SIDE_RANGE/PIXEL_RES:
-                arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
-                adj_arg = (arg - r_angle) % 360
-                if adj_arg >= 90 - SIDE_ANGLE/2 and adj_arg <= 90 + SIDE_ANGLE/2 and math.dist((i, j), ppos) < math.dist(closest_right, ppos):
-                    closest_right = (i, j)
-                elif adj_arg >= 270 - SIDE_ANGLE/2 and adj_arg <= 270 + SIDE_ANGLE/2 and math.dist((i, j), ppos) < math.dist(closest_left, ppos):
-                    closest_left = (i, j)
-    if closest_left != (math.inf, math.inf) and closest_right != (math.inf, math.inf): # If we are in a corridor.
+    if light[1] and light[3]: # If we are in a corridor.
+        # Model the light sensor readings.
+        closest_left = (math.inf, math.inf)
+        closest_right = (math.inf, math.inf)
+        if reverse_mode:
+            r_angle = (angle + 180) % 360
+        else:
+            r_angle = angle
+        for i in range(max(0, math.floor(ppos[0] - 0.5/PIXEL_RES)), min(math.ceil(ppos[0] + 0.5/PIXEL_RES) + 1, X_PIXELS)):
+            for j in range(max(0, math.floor(ppos[1] - 0.5/PIXEL_RES)), min(math.ceil(ppos[1] + 0.5/PIXEL_RES) + 1, Y_PIXELS)):
+                if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SIDE_RANGE/PIXEL_RES:
+                    arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
+                    adj_arg = (arg - r_angle) % 360
+                    if adj_arg >= 90 - SIDE_ANGLE/2 and adj_arg <= 90 + SIDE_ANGLE/2 and math.dist((i, j), ppos) < math.dist(closest_right, ppos):
+                        closest_right = (i, j)
+                    elif adj_arg >= 270 - SIDE_ANGLE/2 and adj_arg <= 270 + SIDE_ANGLE/2 and math.dist((i, j), ppos) < math.dist(closest_left, ppos):
+                        closest_left = (i, j)
         left_dist = math.dist(closest_left, ppos)
         right_dist = math.dist(closest_right, ppos)
+        # Controller logic.
         balance = left_dist - right_dist
         width = left_dist + right_dist
         if cc_active:
@@ -312,7 +346,21 @@ while True:
                     diff = 0
                 else:
                     diff = balance - cc_prev
-                angle -= P_CC*balance + I_CC*cc_sum + D_CC*diff
+                delta = P_CC*balance + I_CC*cc_sum + D_CC*diff
+                if cc_prev_vertex != None and math.dist(cc_prev_vertex, pos) <= UNBOUND_DIST:
+                    angle -= delta
+                else:
+                    cc_offset -= delta
+                    if abs(cc_offset) > MAX_OFFSET and abs(cc_offset) < MAX_OFFSET + delta:
+                        if delta > 0:
+                            delta -= abs(cc_offset) - MAX_OFFSET
+                        else:
+                            delta += abs(cc_offset) - MAX_OFFSET
+                        angle -= delta
+                    elif abs(cc_offset) <= MAX_OFFSET:
+                        angle -= delta
+                    else:
+                        cc_offset += delta
         # if abs(diff) < CUTOFF_CC:
         #     angle -= P_CC*balance + I_CC*cc_sum + D_CC*diff
         # elif balance > 0:
@@ -327,6 +375,7 @@ while True:
     else:
         cc_active = False
         cc_sum = 0
+        cc_offset = 0
     
     # Update robot position.
     if reverse_mode:
@@ -343,7 +392,7 @@ while True:
     # if iterations % 1000 == 0:
     #     manager.bitmap.render_pixels_debug(robot_path, walls, WALL_WIDTH)
     
-    pygame.surfarray.blit_array(screen, manager.bitmap.get_bitmap_debug(pos, robot_path))
+    pygame.surfarray.blit_array(screen, manager.bitmap.get_bitmap_debug(pos, robot_path, manager.get_path()))
     pygame.display.update()
 
 pygame.quit()

@@ -71,6 +71,9 @@ class MazeManager:
     # Angle is given in degrees starting clockwise from north, [0, 360].
     # Light readings are a 4-tuple of booleans.
     def default_navigate(self, pos, angle, light):
+
+        if not self.is_discovered:
+            self.tracker.update_partial_path(pos)
         
         # Translate light readings to forwards/reverse-relative form.
         if self.reverse_mode:
@@ -165,7 +168,7 @@ class MazeManager:
         self.tracker.visit_vertex(disc_pos, link_angles) # Update graph structures.
         self.bitmap.update_pixels(self.tracker.a_list) # Update bitmap.
         if not self.is_discovered: # Update external path in discovery phase.
-            self.tracker.generate_partial_path(pos) # Using the continuous position is intentional here.
+            self.tracker.generate_partial_path(disc_pos, pos)
         
         # Apply entry mark and check if enough of the maze has been discovered.
         entry_link = self.tracker.entry_mark(disc_pos, link_angles)
@@ -181,7 +184,7 @@ class MazeManager:
             else:
                 target_angle = self.tracker.dijkstra_navigate(disc_pos)
         else:
-            target_angle = self.tracker.tremaux_navigate(disc_pos, link_angles, entry_link)
+            target_angle = self.tracker.discovery_navigate(disc_pos, link_angles, entry_link)
         print('Target angle:', target_angle)
 
         self.tracker.prev_vertex = disc_pos # Update previous vertex.
@@ -202,6 +205,13 @@ class MazeManager:
     # Get the bitmap after calling junction_navigate().
     def get_bitmap(self):
         return self.bitmap.pixels
+
+    # Get the shortest path to display.
+    def get_path(self):
+        pixel_path = []
+        for pos in self.tracker.external_path:
+            pixel_path.append(self.bitmap.to_pixels(pos))
+        return pixel_path
 
 if __name__ == '__main__':
     manager = MazeManager()

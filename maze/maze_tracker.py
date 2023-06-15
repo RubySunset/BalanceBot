@@ -6,7 +6,7 @@ class MazeTracker:
 
     def __init__(self):
         self.a_list = {} # Adjacency list to store the maze graph. Vertices are stored by their positions.
-        self.marks = {} # A mapping from vertex positions to lists of link marks (used by Tremaux's algorithm).
+        self.marks = {} # A mapping from vertex positions to lists of link marks.
         self.prev_vertex = None # The position of the last vertex reached.
         self.start = None # Start position.
         self.end = None # End position.
@@ -18,6 +18,7 @@ class MazeTracker:
     def reset(self):
         self.a_list = {}
         self.marks = {}
+        self.prev_vertex = None
         self.start = None
         self.end = None
         self.external_path = []
@@ -113,10 +114,9 @@ class MazeTracker:
             marks[entry_link] += 1 # Apply entry mark.
         return entry_link
 
-    # Navigate during the discovery phase using the modified Tremaux's algorithm. Also apply an exit mark.
-    def tremaux_navigate(self, pos, link_angles, entry_link):
+    # Navigate during the discovery phase. Also apply an exit mark.
+    def discovery_navigate(self, pos, link_angles, entry_link):
         marks = self.marks[pos]
-        # Apply Tremaux's algorithm to find the target link.
         target_link = None
         others_unmarked = True # Are all the other entrances unmarked?
         candidate = None # A possible direciton if all other entrances are unmarked.
@@ -159,8 +159,13 @@ class MazeTracker:
     
     # Generate the shortest path from start to robot's position, for the front-end to display
     # while the robot is still in the discovery phase.
-    def generate_partial_path(self, pos):
-        tree, self.external_path = self.dijkstra(self.start, self.prev_vertex)
+    def generate_partial_path(self, disc_pos, cont_pos):
+        tree, self.external_path = self.dijkstra(self.start, disc_pos)
+        self.external_path.append(cont_pos)
+    
+    # Update the external path with the robot's current position.
+    def update_partial_path(self, pos):
+        self.external_path.pop()
         self.external_path.append(pos)
 
     # Test to see if we have discovered enough of the maze to determine the shortest path.
