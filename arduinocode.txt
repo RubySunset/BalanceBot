@@ -1,0 +1,33 @@
+double distance_moved(double control_speed, double wheel_radius) {
+	distance = control_speed * wheel_radius;
+	return distance;
+}
+
+// derivation = angular speed = change in angle(theta)/time
+// 		arc length = radius * theta so theta = arc length/radius
+//		angular speed = arc length/(radius * time)
+//		velocity = distance(arc length)/time
+//		so angular speed = velocity / radius
+
+// NEW STUFF THIS MAY NOT WORK, I TRIED MY BEST
+// So Step Angle is given in datasheet as 1.8 degrees, this means that the step per revolution is 200 as 360/1.8
+// This works because step angle is the angle at which the rotor moves when one input pulse is applied in degrees.
+// One revolution (360 degrees) can only be completed by 200 steps with each step being 1.8 degrees.
+
+double distance_moved(double control_speed, double wheel_radius) {
+	double wheel_circumference = TWO_PI * wheel_radius;
+
+	// This is unnecessary to name but I'm just doing it for clarity
+	double steps_per_revolution = 200;
+
+	// As one revolution is done, it will go distance of 1 circumference, divided by steps per revolution would give distance per step
+	double distance_per_step = wheel_circumference / steps_per_revolution;
+
+	// if speed is in m/s, conversion to steps: double step_speed = control_speed / distance_per_step
+
+	// Unsure on last step, speed if in steps per second * distance per step will get distance travelled in 1 second??
+	// Might work better if control_speed is actually steps for steps * distance per steps but I think this works
+	double distance = control_speed * distance_per_step;
+	// if needed: double distance = control_speed * distance_per_step * sampling_interval;
+	return distance
+}
