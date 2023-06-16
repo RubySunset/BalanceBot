@@ -54,3 +54,13 @@ class BeaconTri:
     # gamma is the angle between beacons 2 and 3.
     def find_pos(self, alpha, beta, gamma):
         return self.find_pos_general([[alpha, beta], [gamma]])
+    
+    # Finds the angle based on position.
+    # Note that we assume the robot is facing beacon 1 at this point.
+    def find_angle(self, pos):
+        diff = (self.beacon_pos[0][0] - pos[0], pos[1] - self.beacon_pos[0][1])
+        theta = math.degrees(math.atan2(diff[1], diff[0]))
+        if theta >= -90:
+            return 90 - theta
+        else:
+            return -theta - 270

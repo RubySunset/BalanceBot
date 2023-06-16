@@ -6,7 +6,7 @@ from maze_manager import *
 # Sensor parameters.
 FRONT_RANGE = 0.2 # The range of the front sensors.
 SIDE_RANGE = 0.4 # The range of the side sensors.
-SCAN_RANGE = 0.5 # The range of the side sensors when scanning.
+SCAN_RANGE = 0.4 # The range of the side sensors when scanning.
 FRONT_ANGLE = 45 # The angle of acceptance of the front sensors.
 SIDE_ANGLE = 20 # The angle of acceptance of the side sensors.
 SCAN_RES = 64 # The number of vectors we consider in a junction scan.
@@ -14,7 +14,7 @@ SCAN_RES = 64 # The number of vectors we consider in a junction scan.
 # Course-correction controller parameters.
 P_CC = 0.3 # Course correction proportional gain.
 I_CC = 0.0001 # Course correction integral gain.
-D_CC = 0.5 # Course correction derivative gain.
+D_CC = 0.3 # Course correction derivative gain.
 MAX_OFFSET = 10 # The maximum amount of course-correction that can be applied, in degrees.
 UNBOUND_DIST = 0.5 # The distance for which unbounded CC is applied.
 
@@ -30,7 +30,7 @@ cc_prev_vertex = None
 
 # Other parameters.
 PIXEL_RES = 0.01 # Metres/pixel
-WALL_WIDTH = 0.01
+WALL_WIDTH = 0.05
 SPEED = 0.01 # The distance travelled by the robot between each update.
 
 # Notes:
@@ -191,7 +191,7 @@ ppos = (to_pixels(start)[0], to_pixels(start)[1]) # Pixel position.
 angle = 180 # Assume robot is initially pointing south.
 light = [0, 0, 0, 0] # Array of light readings (forwards, right, back, left).
 target_angle = 180 # The target angle from the last rotation command.
-reverse_mode = False # Whether or not the robot is going in reverse.
+# reverse_mode = False # Whether or not the robot is going in reverse.
 robot_path = []
 
 iterations = 0
@@ -200,7 +200,7 @@ while True:
 
     # Check for timeout.
     iterations += 1
-    print('Iteration', iterations)
+    # print('Iteration', iterations)
     if iterations > 10000:
         print('!! Timeout !!')
         break
@@ -217,7 +217,9 @@ while True:
     #             if pixels[j][k] == PixelType.WALL and math.dist([j, k], p) <= 0.15/PIXEL_RES:
     #                 raw_readings[i] += 1
     
-    light = [False, False, False, False]
+    front_light_raw = 0
+    left_light_raw = 0
+    right_light_raw = 0
     for i in range(max(0, math.floor(ppos[0] - max(FRONT_RANGE, SIDE_RANGE)/PIXEL_RES)), min(math.ceil(ppos[0] + max(FRONT_RANGE, SIDE_RANGE)/PIXEL_RES) + 1, X_PIXELS)):
         for j in range(max(0, math.floor(ppos[1] - max(FRONT_RANGE, SIDE_RANGE)/PIXEL_RES)), min(math.ceil(ppos[1] + max(FRONT_RANGE, SIDE_RANGE)/PIXEL_RES) + 1, Y_PIXELS)):
             if pixels[i][j] == PixelType.WALL:
@@ -225,18 +227,19 @@ while True:
                 arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
                 adj_arg = (arg - angle) % 360
                 if dist <= FRONT_RANGE/PIXEL_RES and (adj_arg <= FRONT_ANGLE/2 or adj_arg >= 360 - FRONT_ANGLE/2):
-                    light[0] = True
+                    front_light_raw = 1000
                 elif dist <= SIDE_RANGE/PIXEL_RES and adj_arg >= 90 - SIDE_ANGLE/2 and adj_arg <= 90 + SIDE_ANGLE/2:
-                    light[1] = True
-                elif dist <= FRONT_RANGE/PIXEL_RES and adj_arg >= 180 - FRONT_ANGLE/2 and adj_arg <= 180 + FRONT_ANGLE/2:
-                    light[2] = True
+                    left_light_raw = 1000
+                # elif dist <= FRONT_RANGE/PIXEL_RES and adj_arg >= 180 - FRONT_ANGLE/2 and adj_arg <= 180 + FRONT_ANGLE/2:
+                #     light[2] = True
                 elif dist <= SIDE_RANGE/PIXEL_RES and adj_arg >= 270 - SIDE_ANGLE/2 and adj_arg <= 270 + SIDE_ANGLE/2:
-                    light[3] = True
+                    right_light_raw = 1000
     
     if iterations == 1:
         command = 'j'
     else:
-        command = manager.default_navigate((pos[0], pos[1]), angle, light)
+        command = manager.default_navigate((pos[0] + iterations*0.001, pos[1] + iterations*0.001), angle + iterations*0.01, front_light_raw, left_light_raw, right_light_raw)
+        # Simulate drift (linear w.r.t. time).
 
     if command == 'j':
 
@@ -271,37 +274,6 @@ while True:
         #     if not light_scan[i]:
         #         link_angles.append(math.degrees(math.pi/4 * i))
 
-        light_scan = []
-        for i in range(SCAN_RES):
-            light_scan.append(False)
-        for i in range(max(0, math.floor(ppos[0] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[0] + SCAN_RANGE/PIXEL_RES) + 1, X_PIXELS)):
-            for j in range(max(0, math.floor(ppos[1] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[1] + SCAN_RANGE/PIXEL_RES) + 1, Y_PIXELS)):
-                if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SCAN_RANGE/PIXEL_RES:
-                    arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
-                    light_scan[int(arg/360 * SCAN_RES)] = True
-        link_angles = []
-        counting = False
-        current_angle = 0
-        for i in range(SCAN_RES):
-            if not light_scan[i] and not counting:
-                counting = True
-                current_angle = i/SCAN_RES * 360
-            elif not light_scan[i] and counting:
-                current_angle += 0.5/SCAN_RES * 360
-            elif light_scan[i] and counting:
-                current_angle += 0.5/SCAN_RES * 360
-                counting = False
-                link_angles.append(current_angle)
-        if counting and not light_scan[0]:
-            start = 2*current_angle - 360
-            end = 2*link_angles[0] + 360
-            link_angles.append(((start + end) / 2) % 360)
-            link_angles.pop(0)
-        elif counting and light_scan[0]:
-            link_angles.append(current_angle)
-
-        print('Link angles:', link_angles)
-
         # Simulate angles for triangulation.
         beacon_dist = []
         for i in range(3):
@@ -313,34 +285,56 @@ while True:
             b = beacon_dist[pair[0]]
             c = beacon_dist[pair[1]]
             beacon_angles.append(math.degrees(math.acos((b**2 + c**2 - a**2)/(2*b*c))))
+        
+        # Simulate turning the robot to face the first beacon.
+        diff = (manager.beacon_tri.beacon_pos[0][0] - pos[0], pos[1] - manager.beacon_tri.beacon_pos[0][1])
+        theta = math.degrees(math.atan2(diff[1], diff[0]))
+        if theta >= -90:
+            angle = 90 - theta
+        else:
+            angle = -theta - 270
+        
+        light_scan = []
+        for i in range(SCAN_RES):
+            light_scan.append(0)
+        for i in range(max(0, math.floor(ppos[0] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[0] + SCAN_RANGE/PIXEL_RES) + 1, X_PIXELS)):
+            for j in range(max(0, math.floor(ppos[1] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[1] + SCAN_RANGE/PIXEL_RES) + 1, Y_PIXELS)):
+                if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SCAN_RANGE/PIXEL_RES:
+                    arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
+                    adj_arg = (arg - angle) % 360
+                    light_scan[int(adj_arg/360 * SCAN_RES)] = 1000
 
-        command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], angle, link_angles)
+        command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], light_scan)
+        # if command[0] == 'e':
+        #     print('Reached end.')
+        #     break
+        # elif command[-1] == 'f':
+        #     reverse_mode = False
+        # elif command[-1] == 'b':
+        #     reverse_mode = True
+        # else:
+        #     raise Exception('Invalid command: ' + command)
+        # rotation = int(command[:len(command) - 1])
         if command[0] == 'e':
             print('Reached end.')
             break
-        elif command[-1] == 'f':
-            reverse_mode = False
-        elif command[-1] == 'b':
-            reverse_mode = True
-        else:
-            raise Exception('Invalid command: ' + command)
-        rotation = int(command[:len(command) - 1])
+        rotation = int(command)
         angle += rotation # Apply rotation instantaneously.
     
     # Apply course correction.
-    if light[1] and light[3]: # If we are in a corridor.
+    if left_light_raw and right_light_raw: # If we are in a corridor.
         # Model the light sensor readings.
         closest_left = (math.inf, math.inf)
         closest_right = (math.inf, math.inf)
-        if reverse_mode:
-            r_angle = (angle + 180) % 360
-        else:
-            r_angle = angle
+        # if reverse_mode:
+        #     r_angle = (angle + 180) % 360
+        # else:
+        #     r_angle = angle
         for i in range(max(0, math.floor(ppos[0] - 0.5/PIXEL_RES)), min(math.ceil(ppos[0] + 0.5/PIXEL_RES) + 1, X_PIXELS)):
             for j in range(max(0, math.floor(ppos[1] - 0.5/PIXEL_RES)), min(math.ceil(ppos[1] + 0.5/PIXEL_RES) + 1, Y_PIXELS)):
                 if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SIDE_RANGE/PIXEL_RES:
                     arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
-                    adj_arg = (arg - r_angle) % 360
+                    adj_arg = (arg - angle) % 360
                     if adj_arg >= 90 - SIDE_ANGLE/2 and adj_arg <= 90 + SIDE_ANGLE/2 and math.dist((i, j), ppos) < math.dist(closest_right, ppos):
                         closest_right = (i, j)
                     elif adj_arg >= 270 - SIDE_ANGLE/2 and adj_arg <= 270 + SIDE_ANGLE/2 and math.dist((i, j), ppos) < math.dist(closest_left, ppos):
@@ -392,10 +386,11 @@ while True:
         cc_offset = 0
     
     # Update robot position.
-    if reverse_mode:
-        direction = (angle + 180) % 360
-    else:
-        direction = angle
+    # if reverse_mode:
+    #     direction = (angle + 180) % 360
+    # else:
+    #     direction = angle
+    direction = angle
     direction_2 = math.radians((90 - direction) % 360)
     pos[0] += SPEED * math.cos(direction_2)
     pos[1] -= SPEED * math.sin(direction_2)
@@ -408,6 +403,7 @@ while True:
     
     pygame.surfarray.blit_array(screen, manager.bitmap.get_bitmap_debug(pos, robot_path, manager.get_path()))
     pygame.display.update()
+    # time.sleep(0.1)
 
 pygame.quit()
 manager.bitmap.render_pixels_debug(robot_path)

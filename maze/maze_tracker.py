@@ -13,6 +13,7 @@ class MazeTracker:
         self.external_path = [] # The path sent to the web server to display.
         # When the robot is still traversing the maze, this is the shortest path from the start to the robot.
         # When the robot has reached the end and has surveyed the entire maze, this is the shortest path from start to end.
+        self.prev_entry_link = None
     
     # Reset to initial state.
     def reset(self):
@@ -22,6 +23,7 @@ class MazeTracker:
         self.start = None
         self.end = None
         self.external_path = []
+        self.prev_entry_link = None
     
     # Finds the difference between two numbers in modular arithmetic.
     def mod_diff(self, a, b, mod):
@@ -84,6 +86,9 @@ class MazeTracker:
             self.marks[pos] = []
             for i in range(len(link_angles)):
                 self.marks[pos].append(0)
+        elif self.prev_vertex == pos: # If we are at the same vertex.
+            print('!!! Warning: self-link.')
+            pass
         else:
             self.a_list[self.prev_vertex].add(pos)
             if pos in self.a_list:
@@ -98,8 +103,15 @@ class MazeTracker:
     def entry_mark(self, pos, link_angles):
         marks = self.marks[pos]
         if len(marks) != len(link_angles):
-            raise Exception('Current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(len(marks)) + ').')
-        if self.prev_vertex == None: # If we are at the start.
+            # raise Exception('Current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(len(marks)) + ').')
+            print('!!! Warning: current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(len(marks)) + ').')
+            # In this situation, just reset the links at this vertex.
+            self.marks[pos] = []
+            for i in range(len(link_angles)):
+                self.marks[pos].append(0)
+        if pos == self.prev_vertex:
+            return self.prev_entry_link
+        elif self.prev_vertex == None: # If we are at the start.
             entry_angle = link_angles[0] # Assume we entered from a valid link, doesn't matter which one.
             entry_link = 0
         else:
@@ -111,7 +123,8 @@ class MazeTracker:
             for i in range(len(link_angles)):
                 if self.mod_diff(link_angles[i], entry_angle, 360) < self.mod_diff(link_angles[entry_link], entry_angle, 360):
                     entry_link = i
-            marks[entry_link] += 1 # Apply entry mark.
+            self.marks[pos][entry_link] += 1 # Apply entry mark.
+        self.prev_entry_link = entry_link
         return entry_link
 
     # Navigate during the discovery phase. Also apply an exit mark.
