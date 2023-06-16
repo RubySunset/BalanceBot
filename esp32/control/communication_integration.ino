@@ -20,10 +20,16 @@
 ///-----CONTROL GLOBALS & FUNCTIONS | START----///
 bool STABILITY_MODE = true; //IF STABILITY MODE IS TRUE, STABILISING FRAME ATTACHED TO ROBOT
 
+/* CHANGED BC NOT ENOUGH PINS
 const int STRR = 27;
 const int DIRR = 26;
 const int STRL = 25;
 const int DIRL = 33;
+*/
+const int STRR = 23;
+const int DIRR = 19;
+const int STRL = 18;
+const int DIRL = 5;
 
 //const int SAMPLE_TIME = 1; //sampling time in ms
 
@@ -267,7 +273,7 @@ double course_correct(/*pos, alpha, LDR readings are already global variables*/)
 ///-----CONTROL GLOBALS & FUNCTIONS | END-----///
 
 ///-----COMMUNICATIONS GLOBALS & FUNCTIONS | START-----///
-const char *WIFI_SSID = "Pixel 6";
+const char *WIFI_SSID = "BalanceBot";
 const char *WIFI_PASS = "Ajanthan";
 
 const int BUFFER_SIZE = 28;
@@ -350,7 +356,7 @@ void setup() {
   Serial.println("Connected to WiFi");
 
   // server address, port and URL
-  webSocket.begin("18.133.227.0", 8000, "/ws/rover");
+  webSocket.begin("13.43.40.216", 8000, "/ws/rover");
 
   // event handler
 	webSocket.onEvent(webSocketEvent);
@@ -473,6 +479,8 @@ void loop() {
 ///-----CONTROL LOOP | END-----///
 
 ///-----COMMUNICATIONS LOOP | START-----///
+const unsigned long SEND_INTERVAL_MS = 200;
+static unsigned long lastSendMillis = 0;
 void Task2Code(void* pvParameters) {
   while(true){
     //Serial.println("in task 2");
@@ -488,24 +496,32 @@ void Task2Code(void* pvParameters) {
   //   hexBuf[rlen * 2] = '\0';  // null-terminate the hex string
 
     // send beacon every half second
-    static unsigned long lastSendMillis = 0;
-    if (millis() - lastSendMillis > 200) { 
-      lastSendMillis = millis();
-      LDR_chars[0] = (char)L;
-      LDR_chars[1] = (char)R;
-      LDR_chars[2] = '\0';
-      // JSON doc fixed memory allocation on stack
-      StaticJsonDocument<128> doc;
-      doc["type"] = "sensor";
-      doc["time"] = millis();
-      
-      // store the hexadecimal string in the JSON document
-      doc["LDR"] = LDR_chars;
+    if (millis() - lastSendMillis >= SEND_INTERVAL_MS) {
+        lastSendMillis = millis();
 
-      char message[128];
-      serializeJson(doc, message, sizeof(message));
-      // Serial.println(message);
-      webSocket.sendTXT(message);
+        int LDR_value_L = analogRead(L);  // read LDR connected to pin L
+        int LDR_value_R = analogRead(R);  // read LDR connected to pin R
+        int LDR_value_F1 = analogRead(F1); // read LDR connected to pin R
+        int LDR_value_F2 = analogRead(F2); // read LDR connected to pin R
+        int LDR_value_F3 = analogRead(F3); // read LDR connected to pin R
+
+        // JSON doc fixed memory allocation on stack
+        StaticJsonDocument<128> doc;
+        doc["type"] = "sensor";
+        doc["time"] = millis();
+
+        // store LDR readings in JSON array
+        JsonArray LDR_Array = doc.createNestedArray("LDR_Array");
+        LDR_Array.add(LDR_value_L);
+        LDR_Array.add(LDR_value_R);
+        LDR_Array.add(LDR_value_F1);
+        LDR_Array.add(LDR_value_F2);
+        LDR_Array.add(LDR_value_F3);
+
+        char message[128];
+        serializeJson(doc, message, sizeof(message));
+        // Serial.println(message);
+        webSocket.sendTXT(message);
     }
   }
 }
@@ -580,5 +596,16 @@ void handleMovement(const char* message, double value) {
 void handleScan(const char* message) {
   // handle scan command here
   Serial.printf("Handling scan command: %s\n", message);
+
+  //Record current vertex coordinate; using dead reckoning currently
+  cc_prev_vertex_x = positionX;
+  cc_prev_vertex_y = positionY;
+
+  //check whether can see beacons
+  //store current angle
+  //turn to centre beacons
+  //stop turning when beacon in frame (angle_setpoint = alpha)
+  //send current angle
+
 }
 ///-----COMMUNICATIONS FUNCTIONS | END-----///
