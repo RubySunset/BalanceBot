@@ -139,6 +139,14 @@ double distance_moved(double wheel_speed){
 	return distance;
 }
 
+//carries out appropriate actions once turning done
+//figure out what- send message to node? retrieve instructions from some stack?
+void check_turning_finished(double alpha_error){
+    if(alpha_error < 3){
+        Serial.println('Finished turning'); //need to do things with this later
+    }
+}
+
 int detectionThreshold = 1100;
 bool avoiding_obstacle = false;
 //Decide whether to reroute; return direction of obstacle. This is a failsafe if the routing controller fails
@@ -159,6 +167,103 @@ char obstacleDetected(){
         return 'n';
     }
 }
+
+//-----Course correction controller-----//
+double get_distance(double x1, double y1, double x2, double y2){
+    return(sqrt(pow((x2-x1),2) + pow((y2-y1),2)));
+}
+
+//gains
+double P_CC = 0.3;
+double I_CC = 0.0001;
+double D_CC = 0.5;
+double MAX_OFFSET = 10; //max course correction, degrees
+double UNBOUND_DIST = 0.5; //distance for which unbounded CC is appled
+// Unbounded CC ignores the condition imposed by MAX_OFFSET. in testing, I found that the robot tended to move
+// better if it was allowed to course correct itself by larger amounts shortly after leaving a vertex
+
+//CC controller variables
+bool cc_active = false;
+double cc_sum = 0;
+double cc_prev_balance = 0;
+double cc_prev_left_dist = 0;
+double cc_prev_right_dist = 0;
+double cc_offset = 0;
+double cc_prev_vertex_x = 0;
+double cc_prev_vertex_y = 0;
+double cc_prev_width = 0;
+double cc_alpha = 0;
+// Note that we need to keep track of the position of the previous vertex to determine whether we apply
+// unbounded CC (the robot will need to store its position when receiving a junction scan command)
+
+CC_light_threshold = 300;
+//Apply course correction. Returns the target angle, alpha
+double course_correct(/*pos, alpha, LDR readings are already global variables*/){
+    double left_light = analogRead(L);
+    double right_light = analogRead(R);
+    //only apply course correction in a corridor
+    if((left_light > CC_light_threshold) && (right_light > CC_light_threshold)){
+        //use the inverse square law to estimate the distance to the walls
+        //will require a lot of fine tuning to work
+        double left_dist = 1/sqrt(left_light);
+        double right_dist = 1/sqrt(right_light);
+
+        double balance = left_dist - right_dist; //measure of closeness to right wall compared to left wall
+        double width = left_dist - right_dist; //estimated width of corridor
+
+        if(cc_active){
+            //Rates of change of distances to respective walls
+            double left_diff = left_dist - cc_prev_left_dist;
+            double right_diff = right_dist - cc_prev_right_dist;
+
+            if((abs(width - cc_prev_width) < 1.5) && (abs(abs(left_diff) - abs(right_diff))< 1.5)){
+                //A link to the side is inferred if:
+                //1. The width of the passage is increasing rapidly
+                //2. One wall is receeding much more quickly than the other
+                //This condition also needs tuning
+                cc_sum += balance;
+                diff = balance - cc_prev_balance;
+                double delta = P_CC*balance + I_CC*cc_sum + D_CC*diff;
+                if(get_distance(cc_prev_vertex_x, cc_prev_vertex_y, positionX, positionY) <= UNBOUND_DIST){
+                    //if we're close enough to the last vertex (aka likely junction), neglect to limit CC
+                    cc_alpha -= delta;
+                }
+                else{
+                    cc_offset -= delta;
+                    if((abs(cc_offset) <= MAX_OFFSET)){
+                        cc_alpha -= delta; //if we're within our allowance, proceed as normal
+                    }
+                    else if((abs(cc_offset) >= MAX_OFFSET + delta)){
+                        cc_offset += delta; //if we're completely out, revert the change to cc_offset
+                    }
+                    else{
+                        //we can reduce delta to match the offset limit
+                        if(delta > 0){
+                            delta -= abs(cc_offset) - MAX_OFFSET;
+                        }
+                        else{
+                            delta += abs(cc_offset) - MAX_OFFSET;
+                        }
+                        cc_alpha -= delta;
+                    }
+                }
+            }
+        }
+        cc_active = true;
+        cc_prev_balance = balance;
+        cc_prev_left_dist = left_dist;
+        cc_prev_right_dist = right_dist;
+        c_prev_width = width;
+    }
+    else{
+        //Reset the variables once the controller is inative
+        cc_active = False;
+        cc_sum = 0;
+        cc_offset = 0;
+    }
+    return cc_alpha;
+}
+
 ///-----CONTROL GLOBALS & FUNCTIONS | END-----///
 
 ///-----COMMUNICATIONS GLOBALS & FUNCTIONS | START-----///
@@ -275,6 +380,13 @@ void loop() {
     positionX += displacement*sin(alpha*PI/180);
     positionY += displacement*cos(alpha*PI/180);
 
+    //Course-correction takes priority
+    double course_correction_setpoint = course_correct();
+    if(cc_active = true){
+        movement_mode = 't';
+        angle_setpoint = cc_alpha;
+    }
+
     //LDR-BASED WALL AVOIDANCE FAILSAFE
     //- Needs much more work, but should stop crashes
     //- Better to rely on wall detection controller
@@ -318,6 +430,7 @@ void loop() {
         }
         else if(movement_mode == 't'){
             double wheel_speed_difference = simple_PID_calc(sample_interval, angle_setpoint, alpha, 2, 0.01, 0, 0);
+            check_turning_finished(abs(alpha-angle_setpoint));
             speed_right -= wheel_speed_difference;
             speed_left += wheel_speed_difference;
             control_speed = 0;
@@ -345,6 +458,7 @@ void loop() {
         //Turning control- slightly modify left and right wheel speeds, but only when theta_dash is decently small
         if((movement_mode == 't') && (abs(theta) < 0.5)){
             double wheel_speed_difference = simple_PID_calc(sample_interval, angle_setpoint, alpha, 2, 0.01, 0, 0);
+            check_turning_finished(abs(alpha-angle_setpoint));
             speed_right -= wheel_speed_difference;
             speed_left += wheel_speed_difference;
             control_speed = 0;
@@ -441,16 +555,12 @@ void handleMovement(const char* message, double value) {
     Serial.println(" R: ");
     Serial.println(analogRead(R));
   }
-  if(strcmp(message, "read angle") == 0){
-    Serial.println("Currently facing:");
-    Serial.println(alpha);
-  }
   if(strcmp(message, "read data") == 0){
     //Send back position, light sensors, angle
-    Serial.print('x = ');
+    Serial.print('x = '); //position
     Serial.print(positionX);
     Serial.print('y = ');
-    Serial.println(positionY); //position
+    Serial.println(positionY);
     Serial.println(L); //left LDR
     Serial.println(R); //right LDR
     Serial.println(alpha); //angle
@@ -460,12 +570,13 @@ void handleMovement(const char* message, double value) {
     Serial.println(STABILITY_MODE);
     Serial.println("Velocity setpoint");
     Serial.println(velocity_setpoint);
-    Serial.println("theta_dash value");
+    Serial.println("theta value");
     Serial.println(theta);
   }
   Serial.println(message);
 }
 
+//NB: NEED TO STORE VERTEX OF SCAN FOR COURSE CORRECTION
 void handleScan(const char* message) {
   // handle scan command here
   Serial.printf("Handling scan command: %s\n", message);
