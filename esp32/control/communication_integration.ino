@@ -10,9 +10,9 @@
 #define F1 27
 #define F2 26
 #define F3 25
-#define B1 33
-#define B2 14
-#define B3 4
+// #define B1 33
+// #define B2 14
+// #define B3 4
 #define L 15
 #define R 2
 ///-----LIGHT SENSOR PINS | END-----///
@@ -56,6 +56,7 @@ double sum_e[3] = {0,0,0}, e_n_1[3] = {0,0,0}; //sum of errors and previous erro
 double control_max = 10; //absolute maximum value of actuators
 double speed_max = 5;
 char movement_mode = 'm'; //current movement mode of robot; s = stationary, m = moving, t = turning
+bool finished_turning = true;
 
 //PID Output calculation
 double simple_PID_calc(double Ts, double set_point, double sensor_point, int PID_ID, double Kp, double Ki, double Kd){
@@ -79,7 +80,7 @@ bool sample_flag = false;
 bool sample_flag_2 = false;
 hw_timer_t *sample_time = NULL;
 hw_timer_t *sample_time_2 = NULL;
-sample_interval = 0.002;
+double sample_interval = 0.002;
 
 void IRAM_ATTR doSample(){
   sample_flag = true;
@@ -122,12 +123,12 @@ void setSpeed(int r, int l){
 double distance_per_step = 0;
 //called in setup; units are metres
 double find_distance_per_step(){
-    double wheel_radius = 0.033; //wheel radius is 33mm
+  double wheel_radius = 0.033; //wheel radius is 33mm
 	double wheel_circumference = TWO_PI * wheel_radius;
 	// This is unnecessary to name but I'm just doing it for clarity
 	double steps_per_revolution = 200;
 	// As one revolution is done, it will go distance of 1 circumference, divided by steps per revolution would give distance per step
-	double distance_per_step = wheel_circumference / steps_per_revolution;
+	return wheel_circumference / steps_per_revolution;
 }
 
 double distance_moved(double wheel_speed){
@@ -149,7 +150,11 @@ double distance_moved(double wheel_speed){
 //figure out what- send message to node? retrieve instructions from some stack?
 void check_turning_finished(double alpha_error){
     if(alpha_error < 3){
-        Serial.println('Finished turning'); //need to do things with this later
+        Serial.println('Finished turning');
+        angle_setpoint = alpha;
+        finished_turning = true;
+        movement_mode = 'm';
+        velocity_setpoint = 0;
     }
 }
 
@@ -202,7 +207,7 @@ double cc_alpha = 0;
 // Note that we need to keep track of the position of the previous vertex to determine whether we apply
 // unbounded CC (the robot will need to store its position when receiving a junction scan command)
 
-CC_light_threshold = 300;
+double CC_light_threshold = 300;
 //Apply course correction. Returns the target angle, alpha
 double course_correct(/*pos, alpha, LDR readings are already global variables*/){
     double left_light = analogRead(L);
@@ -228,7 +233,7 @@ double course_correct(/*pos, alpha, LDR readings are already global variables*/)
                 //2. One wall is receeding much more quickly than the other
                 //This condition also needs tuning
                 cc_sum += balance;
-                diff = balance - cc_prev_balance;
+                double diff = balance - cc_prev_balance;
                 double delta = P_CC*balance + I_CC*cc_sum + D_CC*diff;
                 if(get_distance(cc_prev_vertex_x, cc_prev_vertex_y, positionX, positionY) <= UNBOUND_DIST){
                     //if we're close enough to the last vertex (aka likely junction), neglect to limit CC
@@ -259,17 +264,16 @@ double course_correct(/*pos, alpha, LDR readings are already global variables*/)
         cc_prev_balance = balance;
         cc_prev_left_dist = left_dist;
         cc_prev_right_dist = right_dist;
-        c_prev_width = width;
+        cc_prev_width = width;
     }
     else{
         //Reset the variables once the controller is inative
-        cc_active = False;
+        cc_active = false;
         cc_sum = 0;
         cc_offset = 0;
     }
     return cc_alpha;
 }
-
 ///-----CONTROL GLOBALS & FUNCTIONS | END-----///
 
 ///-----COMMUNICATIONS GLOBALS & FUNCTIONS | START-----///
@@ -342,7 +346,7 @@ void setup() {
   timerAlarmWrite(sample_time_2, 20000, true); //sampling time in microseconds
   timerAlarmEnable(sample_time_2);
 
-  distance_per_step = find_distance_per_step();
+  distance_per_step = find_distance_per_step();;
   //-----CONTROL SETUP | END-----//
 
   //-----COMMUNICATIONS SETUP | START-----//
@@ -360,6 +364,7 @@ void setup() {
 
   // event handler
 	webSocket.onEvent(webSocketEvent);
+
 
   //xTaskCreatePinnedToCore(Task1Code, "Task1", 10000, NULL, 0, &Task1,  1); ;
   xTaskCreatePinnedToCore(Task2Code, "Task2", 10000, NULL, 0, &Task2,  0); 
@@ -387,54 +392,56 @@ void loop() {
     positionY += displacement*cos(alpha*PI/180);
 
     //Course-correction takes priority
-    double course_correction_setpoint = course_correct();
-    if(cc_active = true){
-        movement_mode = 't';
-        angle_setpoint = cc_alpha;
+    //double course_correction_setpoint = course_correct();
+    if(cc_active){
+      movement_mode = 't';
+      angle_setpoint = cc_alpha;
     }
 
     //LDR-BASED WALL AVOIDANCE FAILSAFE
     //- Needs much more work, but should stop crashes
     //- Better to rely on wall detection controller
-    char obstacle_direction = obstacleDetected();
-    switch (obstacle_direction){
-        case 'f':
-            velocity_setpoint = -1;
-            movement_mode = 'm';
-            avoiding_obstacle = true;
-            break;
-        case 'b':
-            velocity_setpoint = 1;
-            movement_mode = 'm';
-            avoiding_obstacle = true;
-            break;
-        case 'l':
-            if(!avoiding_obstacle){
-                angle_setpoint += 30;
-                movement_mode = 't';
-                avoiding_obstacle = true;
-            }
-            break;
-        case 'r':
-            if(!avoiding_obstacle){
-                angle_setpoint -= 30;
-                movement_mode = 't';
-                avoiding_obstacle = true;
-            }
-            break;
-        case 'n':
-            avoiding_obstacle = false;
-            break;
+    // char obstacle_direction = 'n'; /*obstacleDetected();*/
+    // switch (obstacle_direction){
+    //     case 'f':
+    //         velocity_setpoint = -1;
+    //         movement_mode = 'm';
+    //         avoiding_obstacle = true;
+    //         break;
+    //     case 'b':
+    //         velocity_setpoint = 1;
+    //         movement_mode = 'm';
+    //         avoiding_obstacle = true;
+    //         break;
+    //     case 'l':
+    //         if(!avoiding_obstacle){
+    //             angle_setpoint += 30;
+    //             movement_mode = 't';
+    //             avoiding_obstacle = true;
+    //         }
+    //         break;
+    //     case 'r':
+    //         if(!avoiding_obstacle){
+    //             angle_setpoint -= 30;
+    //             movement_mode = 't';
+    //             avoiding_obstacle = true;
+    //         }
+    //         break;
+    //     case 'n':
+    //         avoiding_obstacle = false;
+    //         break;
     }
 
     //When stabilising wheels and frame attached
     if(STABILITY_MODE == true){
         if(movement_mode == 'm'){
-            control_speed = simple_PID_calc(sample_interval, velocity_setpoint, sensed_speed, 1, 1, 0.5, 0.01); //values to be tuned
+            //control_speed = simple_PID_calc(sample_interval, velocity_setpoint, sensed_speed, 1, 1, 0.5, 0.01); //values to be tuned
+            control_speed = velocity_setpoint;
             speed_right = control_speed;
             speed_left = control_speed;
         }
         else if(movement_mode == 't'){
+            finished_turning = false;
             double wheel_speed_difference = simple_PID_calc(sample_interval, angle_setpoint, alpha, 2, 0.01, 0, 0);
             check_turning_finished(abs(alpha-angle_setpoint));
             speed_right -= wheel_speed_difference;
@@ -463,6 +470,7 @@ void loop() {
         
         //Turning control- slightly modify left and right wheel speeds, but only when theta_dash is decently small
         if((movement_mode == 't') && (abs(theta) < 0.5)){
+            finished_turning = false;
             double wheel_speed_difference = simple_PID_calc(sample_interval, angle_setpoint, alpha, 2, 0.01, 0, 0);
             check_turning_finished(abs(alpha-angle_setpoint));
             speed_right -= wheel_speed_difference;
@@ -474,13 +482,13 @@ void loop() {
   }
   //Set speed and increment loop number
   setSpeed(speed_right*8, speed_left*8);
-  cycle_number += 1;
+  //cycle_number += 1;
 }
 ///-----CONTROL LOOP | END-----///
 
 ///-----COMMUNICATIONS LOOP | START-----///
 const unsigned long SEND_INTERVAL_MS = 200;
-static unsigned long lastSendMillis = 0;
+static unsigned long lastSendMillis = 1;
 void Task2Code(void* pvParameters) {
   while(true){
     //Serial.println("in task 2");
@@ -507,7 +515,7 @@ void Task2Code(void* pvParameters) {
 
         // JSON doc fixed memory allocation on stack
         StaticJsonDocument<128> doc;
-        doc["type"] = "sensor";
+        doc["type"] = "LDR";
         doc["time"] = millis();
 
         // store LDR readings in JSON array
@@ -573,12 +581,12 @@ void handleMovement(const char* message, double value) {
   }
   if(strcmp(message, "read data") == 0){
     //Send back position, light sensors, angle
-    Serial.print('x = '); //position
+    Serial.print("x = "); //position
     Serial.print(positionX);
-    Serial.print('y = ');
+    Serial.print("y = ");
     Serial.println(positionY);
-    Serial.println(L); //left LDR
-    Serial.println(R); //right LDR
+    Serial.println(analogRead(L)); //left LDR
+    Serial.println(analogRead(R)); //right LDR
     Serial.println(alpha); //angle
   }
   if(strcmp(message, "print values") == 0){
@@ -589,7 +597,7 @@ void handleMovement(const char* message, double value) {
     Serial.println("theta value");
     Serial.println(theta);
   }
-  Serial.println(message);
+  //Serial.println(message);
 }
 
 //NB: NEED TO STORE VERTEX OF SCAN FOR COURSE CORRECTION
