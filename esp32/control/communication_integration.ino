@@ -7,14 +7,14 @@
 #include <MPU6050.h>
 
 ///-----LIGHT SENSOR PINS | START-----///
-#define F1 27
-#define F2 26
-#define F3 25
+#define F1 32 //A4
+#define F2 35 //A5
+#define F3 33 //A3
 // #define B1 33
 // #define B2 14
 // #define B3 4
-#define L 15
-#define R 2
+#define L 34 //soldered connection
+#define R 39 //soldered connection
 ///-----LIGHT SENSOR PINS | END-----///
 
 ///-----CONTROL GLOBALS & FUNCTIONS | START----///
@@ -50,7 +50,7 @@ double sensed_speed = 0;
 double positionX = 0;
 double positionY = 0;
 
-int lightL = 1; //should these be volatile?
+volatile int lightL = 1;  //should these be volatile?
 int lightR = 1;
 int lightF1 = 1;
 int lightF2 = 1;
@@ -155,8 +155,8 @@ double distance_moved(double wheel_speed) {
 //carries out appropriate actions once turning done
 //figure out what- send message to node? retrieve instructions from some stack?
 void check_turning_finished(double alpha_error) {
-  if (alpha_error < 3) {
-    Serial.println('Finished turning');
+  if (alpha_error < 0.7) {
+    Serial.println("Finished turning");
     angle_setpoint = alpha;
     finished_turning = true;
     movement_mode = 'm';
@@ -164,23 +164,40 @@ void check_turning_finished(double alpha_error) {
   }
 }
 
+bool writingToLight = false;
 void sense_light_levels() {
+  writingToLight = true;
   lightL = analogRead(L);
   lightR = analogRead(R);
   lightF1 = analogRead(F1);
   lightF2 = analogRead(F2);
   lightF3 = analogRead(F3);
-  Serial.println("Task on core "+String(xPortGetCoreID())+" read LDR values as: L = "+String(lightL)+" | R = "+String(lightR)+" | F1 = "+String(lightF1)+" | F2 = "+String(lightF2)+" | F3 = "+String(lightF3));
+  writingToLight = false;
+  Serial.println("Task on core " + String(xPortGetCoreID()) + " read LDR values as: L = " + String(lightL) + " | R = " + String(lightR) + " | F1 = " + String(lightF1) + " | F2 = " + String(lightF2) + " | F3 = " + String(lightF3));
+}
+
+void analogSample() {
+  const unsigned long MEASURE_INTERVAL = 100;
+  static unsigned long lastMeasureMillis;
+
+  if (millis() - lastMeasureMillis > MEASURE_INTERVAL) {
+    lastMeasureMillis = millis();
+    lightL = analogRead(L);
+    lightR = analogRead(R);
+    lightF1 = analogRead(F1);
+    lightF2 = analogRead(F2);
+    lightF3 = analogRead(F3);
+  }
+  //Serial.println("Task on core " + String(xPortGetCoreID()) + " read LDR values as: L = " + String(lightL) + " | R = " + String(lightR) + " | F1 = " + String(lightF1) + " | F2 = " + String(lightF2) + " | F3 = " + String(lightF3));
 }
 
 //prints all values, for debugging
 char printWhat = 'n';  //n for nothing, l for location, s for sensors
 void dataPrinter() {
   if (printWhat == 'l') {
-    Serial.println("theta : "+String(theta)+" | alpha : "+String(alpha)+" | positionX : "+String(positionX)+" | positionY : "+String(positionY));
-  } 
-  else if (printWhat == 's') {
-    Serial.println("L = "+String(lightL)+" | R = "+String(lightR)+" | F1 = "+String(lightF1)+" | F2 = "+String(lightF2)+" | F3 = "+String(lightF3));
+    Serial.println("theta : " + String(theta) + " | alpha : " + String(alpha) + " | positionX : " + String(positionX) + " | positionY : " + String(positionY));
+  } else if (printWhat == 's') {
+    Serial.println("L = " + String(lightL) + " | R = " + String(lightR) + " | F1 = " + String(lightF1) + " | F2 = " + String(lightF2) + " | F3 = " + String(lightF3));
   }
 }
 
@@ -422,7 +439,8 @@ void ControlLoop(void* pvParameters) {
       positionX += displacement * sin(alpha * PI / 180);
       positionY += displacement * cos(alpha * PI / 180);
 
-      sense_light_levels();
+      //sense_light_levels();
+      analogSample();
 
       //comment out when not debugging
       dataPrinter();
@@ -524,9 +542,8 @@ void ControlLoop(void* pvParameters) {
 const unsigned long SEND_INTERVAL_MS = 200;
 static unsigned long lastSendMillis = 1;
 void CommunicationsLoop(void* pvParameters) {
-  vTaskDelay(100);
-
   while (true) {
+    vTaskDelay(100);
     //Serial.println("in task 2");
     webSocket.loop();
     // if (Serial.available() >= BUFFER_SIZE) {
