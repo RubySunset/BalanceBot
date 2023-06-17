@@ -16,7 +16,7 @@ class PixelType(Enum):
 class MazeBitmap:
 
     PIXEL_RES = 0.01 # How many metres a single pixel is.
-    WIDTH = 0.3 # The width of passages in standard units.
+    WIDTH = 0 # The width of passages in standard units.
 
     def __init__(self, X_LIM, Y_LIM):
         self.X_LIM = X_LIM
@@ -30,7 +30,7 @@ class MazeBitmap:
             for j in range(self.Y_PIXELS):
                 pixel_row.append(PixelType.EMPTY)
             self.pixels.append(pixel_row)
-        self.painted_links = [] # Pairs of vertices whose links have already been painted.
+        # self.painted_links = [] # Pairs of vertices whose links have already been painted.
         self.wall_pixels = []
         self.img_pixels = np.zeros((self.X_PIXELS * 3, self.Y_PIXELS * 3, 3))
     
@@ -42,7 +42,7 @@ class MazeBitmap:
             for j in range(self.Y_PIXELS):
                 pixel_row.append(PixelType.EMPTY)
             self.pixels.append(pixel_row)
-        self.painted_links = []
+        # self.painted_links = []
         self.wall_pixels = []
         self.img_pixels = np.zeros((self.X_PIXELS * 3, self.Y_PIXELS * 3, 3))
     
@@ -70,13 +70,18 @@ class MazeBitmap:
     # Update the pixel array.
     def update_pixels(self, a_list):
         # start_time = time.time()
+        for i in range(self.X_PIXELS):
+            for j in range(self.Y_PIXELS):
+                if self.pixels[i][j] in (PixelType.VERTEX, PixelType.PATH, PixelType.CLEARED):
+                    self.pixels[i][j] = PixelType.EMPTY
+                    self.debug_pixel(self.img_pixels, (i, j), (0, 0, 0))
         for v in a_list: # Iterate through vertices.
             for n in a_list[v]: # Iterate through neighbours.
-                if (v, n) in self.painted_links or (n, v) in self.painted_links: # If this link has already been painted.
-                    continue
+                # if (v, n) in self.painted_links or (n, v) in self.painted_links: # If this link has already been painted.
+                #     continue
                 if v == n:
                     raise Exception('Self link.')
-                self.painted_links.append((v, n))
+                # self.painted_links.append((v, n))
                 p1 = self.to_pixels(v)
                 p2 = self.to_pixels(n)
                 for p in (p1, p2):
@@ -185,8 +190,8 @@ class MazeBitmap:
     
     # Convert the bitmap into an array of colours.
     def get_bitmap_debug(self, pos, robot_path, external_path):
-        for pos in robot_path:
-            self.debug_pixel(self.img_pixels, pos, (0, 255, 255))
+        # for pos in robot_path:
+        #     self.debug_pixel(self.img_pixels, pos, (0, 255, 255))
         foo = np.copy(self.img_pixels)
         self.debug_pixel(foo, pos, (0, 0, 255))
         for pos in external_path:

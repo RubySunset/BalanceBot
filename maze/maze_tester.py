@@ -16,7 +16,7 @@ P_CC = 0.3 # Course correction proportional gain.
 I_CC = 0.0001 # Course correction integral gain.
 D_CC = 0.3 # Course correction derivative gain.
 MAX_OFFSET = 10 # The maximum amount of course-correction that can be applied, in degrees.
-UNBOUND_DIST = 0.5 # The distance for which unbounded CC is applied.
+UNBOUND_DIST = 0.3 # The distance for which unbounded CC is applied.
 
 # Course-correction controller variables.
 cc_active = False
@@ -146,7 +146,7 @@ def config6():
     walls.append(((2.5, 0.5), (2.5, 1.5)))
     walls.append(((2, 1.5), (2.5, 1.5)))
 
-config5()
+config6()
 
 pixels = []
 for i in range(X_PIXELS):
@@ -243,7 +243,6 @@ while True:
 
     if command == 'j':
 
-        print('Junction position:', pos)
         cc_prev_vertex = pos
 
         # loci = []
@@ -401,7 +400,7 @@ while True:
     # if iterations % 1000 == 0:
     #     manager.bitmap.render_pixels_debug(robot_path, walls, WALL_WIDTH)
     
-    pygame.surfarray.blit_array(screen, manager.bitmap.get_bitmap_debug(pos, robot_path, manager.get_path()))
+    pygame.surfarray.blit_array(screen, manager.bitmap.get_bitmap_debug(ppos, robot_path, manager.get_path()))
     pygame.display.update()
     # time.sleep(0.1)
 

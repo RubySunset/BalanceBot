@@ -9,8 +9,7 @@ class MazeManager:
     X_LIM = 3
     Y_LIM = 2
 
-    RES = 0.25 # The resolution of the underlying grid that positions are snapped to.
-    # The maximum distance between two points for them to be considered the same is RES/2.
+    # RES = 0.25 # The resolution of the underlying grid that positions are snapped to.
 
     # J_DIST = 0.3 # The distance we travel straight for after turning at a junction.
     LINK_DIST = 0.15 # The distance we travel straight for after detecting a side link.
@@ -63,32 +62,32 @@ class MazeManager:
         self.robot_pos = None
         self.robot_angle = None
     
-    # Discretise a point to fit it to the grid. Also force it into the arena if it is out of bounds.
-    def discretise_point(self, point):
-        d_point = [round(point[0] / self.RES) * self.RES, round(point[1] / self.RES) * self.RES]
-        if d_point[0] < 0:
-            d_point[0] = 0
-            print('Warning: point out of bounds (left): ' + str(d_point))
-        elif d_point[0] > self.X_LIM:
-            d_point[0] = self.X_LIM
-            print('Warning: point out of bounds (right): ' + str(d_point))
-        if d_point[1] < 0:
-            d_point[1] = 0
-            print('Warning: point out of bounds (top): ' + str(d_point))
-        elif d_point[1] > self.Y_LIM:
-            d_point[1] = self.Y_LIM
-            print('Warning: point out of bounds (bottom): ' + str(d_point))
-        return (d_point[0], d_point[1])
+    # # Discretise a point to fit it to the grid. Also force it into the arena if it is out of bounds.
+    # def discretise_point(self, point):
+    #     d_point = [round(point[0] / self.RES) * self.RES, round(point[1] / self.RES) * self.RES]
+    #     if d_point[0] < 0:
+    #         d_point[0] = 0
+    #         print('Warning: point out of bounds (left): ' + str(d_point))
+    #     elif d_point[0] > self.X_LIM:
+    #         d_point[0] = self.X_LIM
+    #         print('Warning: point out of bounds (right): ' + str(d_point))
+    #     if d_point[1] < 0:
+    #         d_point[1] = 0
+    #         print('Warning: point out of bounds (top): ' + str(d_point))
+    #     elif d_point[1] > self.Y_LIM:
+    #         d_point[1] = self.Y_LIM
+    #         print('Warning: point out of bounds (bottom): ' + str(d_point))
+    #     return (d_point[0], d_point[1])
     
     # Set a starting point.
-    def set_start(self, raw_pos):
-        pos = self.discretise_point(raw_pos)
+    def set_start(self, pos):
+        # pos = self.discretise_point(raw_pos)
         self.tracker.set_start(pos)
         self.bitmap.set_start(pos)
     
     # Set an end point.
-    def set_end(self, raw_pos):
-        pos = self.discretise_point(raw_pos)
+    def set_end(self, pos):
+        # pos = self.discretise_point(raw_pos)
         self.tracker.set_end(pos)
         self.bitmap.set_end(pos)
     
@@ -200,8 +199,11 @@ class MazeManager:
     def junction_navigate(self, alpha, beta, gamma, readings):
 
         # Triangulate.
-        self.robot_pos = self.beacon_tri.find_pos(alpha, beta, gamma)        
+        self.robot_pos = self.beacon_tri.find_pos(alpha, beta, gamma)
+        self.robot_pos = (round(self.robot_pos[0], 3), round(self.robot_pos[1], 3)) # Mostly for convenience when testing...
         self.robot_angle = self.beacon_tri.find_angle(self.robot_pos)
+
+        print('Vertex at', self.robot_pos)
 
         # Convert light sensor readings to link angles.
         light_scan = []
@@ -260,10 +262,10 @@ class MazeManager:
         # else:
         #     r_angle = self.robot_angle
 
-        disc_pos = self.discretise_point(self.robot_pos)
+        # disc_pos = self.discretise_point(self.robot_pos)
 
         # Check if we've reached the end.
-        if disc_pos == self.tracker.end:
+        if math.dist(self.robot_pos, self.tracker.end) <= self.tracker.MIN_DIST:
             self.reached_end = True
             print('End reached.')
             if self.is_discovered:
@@ -271,29 +273,30 @@ class MazeManager:
                 return 'e'
         
         # Update relevant data structures.
-        self.tracker.visit_vertex(disc_pos, link_angles) # Update graph structures.
+        v_pos = self.tracker.visit_vertex(self.robot_pos, link_angles) # Update graph structures.
+        print(self.tracker.a_list)
         self.bitmap.update_pixels(self.tracker.a_list) # Update bitmap.
         if not self.is_discovered: # Update external path in discovery phase.
-            self.tracker.generate_partial_path(disc_pos, self.robot_pos)
+            self.tracker.generate_partial_path(v_pos, self.robot_pos)
         
         # Apply entry mark and check if enough of the maze has been discovered.
-        entry_link = self.tracker.entry_mark(disc_pos, link_angles)
+        entry_link = self.tracker.entry_mark(v_pos, link_angles)
         if self.reached_end and not self.is_discovered and self.tracker.enough_discovered():
             self.is_discovered = True
             self.tracker.generate_complete_path()
         
         # Find the target angle.
         if self.is_discovered:
-            if disc_pos == self.tracker.end:
+            if math.dist(self.robot_pos, self.tracker.end) <= self.tracker.MIN_DIST:
                 print('Finished.')
                 return 'e'
             else:
-                target_angle = self.tracker.dijkstra_navigate(disc_pos)
+                target_angle = self.tracker.dijkstra_navigate(v_pos)
         else:
-            target_angle = self.tracker.discovery_navigate(disc_pos, link_angles, entry_link)
+            target_angle = self.tracker.discovery_navigate(v_pos, link_angles, entry_link)
         print('Target angle:', target_angle)
 
-        self.tracker.prev_vertex = disc_pos # Update previous vertex.
+        self.tracker.prev_vertex = v_pos # Update previous vertex.
         self.is_forcing = True # Force straight after reaching a junction (and turning).
         self.last_vertex = self.robot_pos
         self.last_dr_pos = self.prev_dr_pos
