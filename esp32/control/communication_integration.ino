@@ -18,7 +18,7 @@
 ///-----LIGHT SENSOR PINS | END-----///
 
 ///-----CONTROL GLOBALS & FUNCTIONS | START----///
-bool STABILITY_MODE = true;  //IF STABILITY MODE IS TRUE, STABILISING FRAME ATTACHED TO ROBOT
+bool STABILITY_MODE = false;  //IF STABILITY MODE IS TRUE, STABILISING FRAME ATTACHED TO ROBOT
 
 /* CHANGED BC NOT ENOUGH PINS
 const int STRR = 27;
@@ -61,7 +61,7 @@ int lightF3 = 1;
 double sum_e[3] = { 0, 0, 0 }, e_n_1[3] = { 0, 0, 0 };  //sum of errors and previous error initialisation
 double control_max = 10;                                //absolute maximum value of actuators
 double speed_max = 5;
-char movement_mode = 'm';  //current movement mode of robot; s = stationary, m = moving, t = turning
+char movement_mode = 's';  //current movement mode of robot; s = stationary, m = moving, t = turning
 bool finished_turning = true;
 
 //PID Output calculation
@@ -152,6 +152,19 @@ double distance_moved(double wheel_speed) {
   return distance;
 }
 
+//Complementary filter for alpha
+const double COMPL_ALPHA = 0.98;
+const int filter_adjustment_interval = 500;
+double compl_alpha = 0;
+double calibrateMPU(){
+  for(int i = 0; i < 1000; i++){
+    mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    compl_alpha = 0.999*(compl_alpha+gy*0.002/131)+0.001*atan2(ax,az)*RAD_TO_DEG;
+    delay(2);
+  }
+  return compl_alpha;
+}
+
 //carries out appropriate actions once turning done
 //figure out what- send message to node? retrieve instructions from some stack?
 void check_turning_finished(double alpha_error) {
@@ -192,10 +205,10 @@ void analogSample() {
 }
 
 //prints all values, for debugging
-char printWhat = 'n';  //n for nothing, l for location, s for sensors
+char printWhat = 'l';  //n for nothing, l for location, s for sensors
 void dataPrinter() {
   if (printWhat == 'l') {
-    Serial.println("theta : " + String(theta) + " | alpha : " + String(alpha) + " | positionX : " + String(positionX) + " | positionY : " + String(positionY));
+    Serial.println("theta : " + String(theta) + " | alpha : " + String(alpha) + " | compl_alpha : " + String(compl_alpha) + " | positionX : " + String(positionX) + " | positionY : " + String(positionY));
   } else if (printWhat == 's') {
     Serial.println("L = " + String(lightL) + " | R = " + String(lightR) + " | F1 = " + String(lightF1) + " | F2 = " + String(lightF2) + " | F3 = " + String(lightF3));
   }
@@ -312,6 +325,8 @@ double course_correct(/*pos, alpha, LDR readings are already global variables*/)
 }
 ///-----CONTROL GLOBALS & FUNCTIONS | END-----///
 
+bool useCommsFunctions = false; //for debugging; turn wifi functionality on and off
+
 ///-----COMMUNICATIONS GLOBALS & FUNCTIONS | START-----///
 const char* WIFI_SSID = "BalanceBot";
 const char* WIFI_PASS = "Ajanthan";
@@ -370,6 +385,8 @@ void setup() {
   mpu.setYGyroOffset(-48);
   mpu.setZGyroOffset(19);
 
+  alpha = calibrateMPU();
+
   pinMode(DIRR, OUTPUT);
   pinMode(DIRL, OUTPUT);
   s1.setMaxSpeed(700);
@@ -389,31 +406,34 @@ void setup() {
   //-----CONTROL SETUP | END-----//
 
   //-----COMMUNICATIONS SETUP | START-----//
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  if(useCommsFunctions == true){
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
 
-  // Connect to wifi
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
+    // Connect to wifi
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(1000);
+      Serial.println("Connecting to WiFi...");
+    }
+    Serial.println("Connected to WiFi");
+
+    // server address, port and URL
+    webSocket.begin("13.43.40.216", 8000, "/ws/rover");
+
+    // event handler
+    webSocket.onEvent(webSocketEvent);
+
+    //try every 5000 again if connection has failed
+    //idk why but its duplicating connections
+    webSocket.setReconnectInterval(5000);
   }
-  Serial.println("Connected to WiFi");
-
-  // server address, port and URL
-  webSocket.begin("13.43.40.216", 8000, "/ws/rover");
-
-  // event handler
-  webSocket.onEvent(webSocketEvent);
-
-  // try every 5000 again if connection has failed
-  // idk why but its duplicating connections
-  // webSocket.setReconnectInterval(5000);
-
   //-----COMMUNICATIONS SETUP | END-----//
 
   //-----RTOS SETUP | START-----//
   //During debugging, can swap around ControlLoop and CommunicationsCode to change priority
   xTaskCreatePinnedToCore(ControlLoop, "Task1", 8000, NULL, 2, &Task1, 1);
-  xTaskCreatePinnedToCore(CommunicationsLoop, "Task2", 8000, NULL, 1, &Task2, 0);
+  if(useCommsFunctions == true){
+    xTaskCreatePinnedToCore(CommunicationsLoop, "Task2", 8000, NULL, 1, &Task2, 0);
+  }
   //-----RTOS SETUP | END-----//
 
   //xTaskCreatePinnedToCore(Task2Code, "Task2", 10000, NULL, tskIDLE_PRIORITY, &Task2, 0);
@@ -422,6 +442,7 @@ void setup() {
 //null loop
 void loop() {}
 
+int k = 0;
 ///-----CONTROL LOOP | START-----///
 void ControlLoop(void* pvParameters) {
   while (true) {
@@ -433,6 +454,16 @@ void ControlLoop(void* pvParameters) {
       alpha_dash = gx / 131;
       theta += sample_interval * theta_dash;
       alpha += sample_interval * alpha_dash;
+
+      //alpha complementary filter
+      int accy = ay/1638;
+      int accz = az/1638;   
+      compl_alpha = COMPL_ALPHA*(compl_alpha + alpha_dash*0.002)-(1-COMPL_ALPHA)*(atan2(accy,accz)+PI)*RAD_TO_DEG;
+      if(k>filter_adjustment_interval){
+        alpha = compl_alpha;
+        k=0;
+      }
+
       //velocity and position in m/s and m. displacement is since last sample
       double displacement = distance_moved(control_speed);
       sensed_speed = displacement / sample_interval;
@@ -512,7 +543,7 @@ void ControlLoop(void* pvParameters) {
         velocity_setpoint = 0;
       }
       if (movement_mode == 'm') {
-        theta_setpoint = simple_PID_calc(sample_interval, velocity_setpoint, sensed_speed, 1, 1, 0, 0.01);
+        theta_setpoint = simple_PID_calc(sample_interval, 0 /*velocity_setpoint*/, sensed_speed, 1, 1, 0, 0);
       }
 
       //theta_dash control- always necessary, present in both of other modes too
