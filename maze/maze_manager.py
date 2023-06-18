@@ -1,6 +1,7 @@
 from maze_tracker import *
 from maze_bitmap import *
 from beacon_tri import *
+from maze_db import *
 
 # Main class. Instantiate and use in other modules.
 class MazeManager:
@@ -23,6 +24,8 @@ class MazeManager:
         self.tracker = MazeTracker()
         self.bitmap = MazeBitmap(self.X_LIM, self.Y_LIM)
         self.beacon_tri = BeaconTri(self.X_LIM, self.Y_LIM)
+        self.maze_db = MazeDB()
+        self.maze_db.set_c_string('mongodb://admin:secret@13.43.40.216:6000/admin?authMechanism=DEFAULT') # TODO remove this.
         self.reached_end = False # Have we reached the end?
         self.is_discovered = False # Have we discovered enough of the maze to find the shortest path?
         # self.reverse_mode = False # Is the robot in reverse mode?
@@ -62,38 +65,27 @@ class MazeManager:
         self.robot_pos = None
         self.robot_angle = None
     
-    # # Discretise a point to fit it to the grid. Also force it into the arena if it is out of bounds.
-    # def discretise_point(self, point):
-    #     d_point = [round(point[0] / self.RES) * self.RES, round(point[1] / self.RES) * self.RES]
-    #     if d_point[0] < 0:
-    #         d_point[0] = 0
-    #         print('Warning: point out of bounds (left): ' + str(d_point))
-    #     elif d_point[0] > self.X_LIM:
-    #         d_point[0] = self.X_LIM
-    #         print('Warning: point out of bounds (right): ' + str(d_point))
-    #     if d_point[1] < 0:
-    #         d_point[1] = 0
-    #         print('Warning: point out of bounds (top): ' + str(d_point))
-    #     elif d_point[1] > self.Y_LIM:
-    #         d_point[1] = self.Y_LIM
-    #         print('Warning: point out of bounds (bottom): ' + str(d_point))
-    #     return (d_point[0], d_point[1])
-    
     # Set a starting point.
     def set_start(self, pos):
         # pos = self.discretise_point(raw_pos)
         self.tracker.set_start(pos)
         self.bitmap.set_start(pos)
+        return self.bitmap.to_pixels(pos)
     
     # Set an end point.
     def set_end(self, pos):
         # pos = self.discretise_point(raw_pos)
         self.tracker.set_end(pos)
         self.bitmap.set_end(pos)
+        return self.bitmap.to_pixels(pos)
     
     # Set the beacon positions.
     def set_beacons(self, beacon_pos):
         self.beacon_tri.set_beacons(beacon_pos)
+    
+    # Set the MongoDB connection string.
+    def set_connection_string(self, connection_string):
+        self.maze_db.set_c_string(connection_string)
     
     # Gets the best estimate of the robot's position in pixel coords.
     def get_pos(self):
@@ -236,8 +228,8 @@ class MazeManager:
             # start = 2*current_angle - 360
             # end = 2*link_angles[0] + 360
             # link_angles.append(((start + end) / 2) % 360)
-            right_dist = self.tracker.mod_diff(self.robot_angle % 360, link_angles[0], 360)
-            # left_dist = self.tracker.mod_diff(self.robot_angle, current_angle) * 2
+            right_dist = abs(self.tracker.mod_diff(self.robot_angle % 360, link_angles[0], 360))
+            # left_dist = abs(self.tracker.mod_diff(self.robot_angle, current_angle) * 2)
             link_angles.append((track_angle + right_dist) % 360)
             link_angles.pop(0)
         elif counting and light_scan[0]:
@@ -247,9 +239,9 @@ class MazeManager:
         closest_index = 0
         closest_dist = math.inf
         for i in range(len(link_angles)):
-            if self.tracker.mod_diff(link_angles[i], 0, 360) < closest_dist:
+            if abs(self.tracker.mod_diff(link_angles[i], 0, 360)) < closest_dist:
                 closest_index = i
-                closest_dist = self.tracker.mod_diff(link_angles[i], 0, 360)
+                closest_dist = abs(self.tracker.mod_diff(link_angles[i], 0, 360))
         temp = []
         for i in range(len(link_angles)):
             temp.append(link_angles[(i + closest_index) % len(link_angles)])
@@ -270,17 +262,19 @@ class MazeManager:
             print('End reached.')
             if self.is_discovered:
                 print('Finished.')
+                # self.maze_db.add_doc(self.get_bitmap(), self.get_path())
+                # self.maze_db.add_doc(self.bitmap.to_pixels(self.tracker.start), self.bitmap.to_pixels(self.tracker.end), self.get_edges(), self.get_path())
+                # TODO
                 return 'e'
         
         # Update relevant data structures.
         v_pos = self.tracker.visit_vertex(self.robot_pos, link_angles) # Update graph structures.
-        print(self.tracker.a_list)
         self.bitmap.update_pixels(self.tracker.a_list) # Update bitmap.
         if not self.is_discovered: # Update external path in discovery phase.
             self.tracker.generate_partial_path(v_pos, self.robot_pos)
         
         # Apply entry mark and check if enough of the maze has been discovered.
-        entry_link = self.tracker.entry_mark(v_pos, link_angles)
+        # self.tracker.entry_mark(v_pos, link_angles)
         if self.reached_end and not self.is_discovered and self.tracker.enough_discovered():
             self.is_discovered = True
             self.tracker.generate_complete_path()
@@ -289,11 +283,14 @@ class MazeManager:
         if self.is_discovered:
             if math.dist(self.robot_pos, self.tracker.end) <= self.tracker.MIN_DIST:
                 print('Finished.')
+                # self.maze_db.add_doc(self.get_bitmap(), self.get_path())
+                # self.maze_db.add_doc(self.bitmap.to_pixels(self.tracker.start), self.bitmap.to_pixels(self.tracker.end), self.get_edges(), self.get_path())
+                # TODO
                 return 'e'
             else:
                 target_angle = self.tracker.dijkstra_navigate(v_pos)
         else:
-            target_angle = self.tracker.discovery_navigate(v_pos, link_angles, entry_link)
+            target_angle = self.tracker.discovery_navigate(v_pos, link_angles)
         print('Target angle:', target_angle)
 
         self.tracker.prev_vertex = v_pos # Update previous vertex.
@@ -320,9 +317,40 @@ class MazeManager:
     
     # Get the bitmap after calling junction_navigate().
     def get_bitmap(self):
-        return self.bitmap.pixels
+        temp = []
+        for i in range(self.bitmap.X_PIXELS):
+            row = []
+            for j in range(self.bitmap.Y_PIXELS):
+                pixel = self.bitmap.pixels[i][j]
+                if pixel == PixelType.EMPTY:
+                    row.append(0)
+                elif pixel == PixelType.START:
+                    row.append(1)
+                elif pixel == PixelType.END:
+                    row.append(2)
+                elif pixel == PixelType.VERTEX:
+                    row.append(3)
+                elif pixel == PixelType.PATH:
+                    row.append(4)
+                elif pixel == PixelType.CLEARED:
+                    row.append(5)
+                else:
+                    raise ValueError('Incorrect pixel value.')
+            temp.append(row)
+        return temp
+    
+    # Get the pairs of vertices in pixel coordinates.
+    def get_edges(self):
+        edges = []
+        for v in self.tracker.a_list:
+            for n in self.tracker.a_list[v]:
+                a = self.bitmap.to_pixels(v)
+                b = self.bitmap.to_pixels(n)
+                if (a, b) not in edges and (b, a) not in edges:
+                    edges.append((a, b))
+        return edges
 
-    # Get the shortest path to display.
+    # Get the shortest path to display in pixel coordinates.
     def get_path(self):
         pixel_path = []
         for path_pos in self.tracker.external_path:

@@ -7,15 +7,15 @@ from maze_manager import *
 FRONT_RANGE = 0.2 # The range of the front sensors.
 SIDE_RANGE = 0.4 # The range of the side sensors.
 SCAN_RANGE = 0.4 # The range of the side sensors when scanning.
-FRONT_ANGLE = 45 # The angle of acceptance of the front sensors.
-SIDE_ANGLE = 20 # The angle of acceptance of the side sensors.
+FRONT_ANGLE = 20 # The angle of acceptance of the front sensors.
+SIDE_ANGLE = 15 # The angle of acceptance of the side sensors.
 SCAN_RES = 64 # The number of vectors we consider in a junction scan.
 
 # Course-correction controller parameters.
 P_CC = 0.3 # Course correction proportional gain.
 I_CC = 0.0001 # Course correction integral gain.
 D_CC = 0.3 # Course correction derivative gain.
-MAX_OFFSET = 10 # The maximum amount of course-correction that can be applied, in degrees.
+MAX_OFFSET = 5 # The maximum amount of course-correction that can be applied, in degrees.
 UNBOUND_DIST = 0.3 # The distance for which unbounded CC is applied.
 
 # Course-correction controller variables.
@@ -146,7 +146,33 @@ def config6():
     walls.append(((2.5, 0.5), (2.5, 1.5)))
     walls.append(((2, 1.5), (2.5, 1.5)))
 
-config6()
+def config7():
+    walls.append(((0.5, 0.5), (1, 0.5)))
+    walls.append(((0, 1), (1, 1)))
+    walls.append(((1, 1), (1, 1.5)))
+    walls.append(((0.5, 1.5), (1, 1.5)))
+    walls.append(((1.5, 0.5), (2, 0.5)))
+    walls.append(((1.5, 0.5), (1.5, 1)))
+    walls.append(((2.5, 0.5), (2.5, 2)))
+    walls.append(((1.5, 1), (2.5, 2)))
+    walls.append(((1.5, 1.5), (1.5, 2)))
+    walls.append(((1.5, 1.5), (2, 2)))
+
+def config8():
+    walls.append(((0.5, 0.5), (1, 0.5)))
+    walls.append(((0, 1), (1, 1)))
+    walls.append(((1, 1), (1, 1.5)))
+    walls.append(((0.5, 1.5), (1, 1.5)))
+    walls.append(((1.5, 0.5), (2, 0.5)))
+    walls.append(((1.5, 0.5), (1.5, 1)))
+    walls.append(((2.5, 0.5), (2.5, 1.5)))
+    walls.append(((2, 1), (2.5, 1.5)))
+    walls.append(((2, 1), (2.5, 1)))
+    walls.append(((1.5, 1), (2.5, 2)))
+    walls.append(((1.5, 1.5), (1.5, 2)))
+    walls.append(((1.5, 1.5), (2, 2)))
+
+config8()
 
 pixels = []
 for i in range(X_PIXELS):
@@ -403,6 +429,12 @@ while True:
     pygame.surfarray.blit_array(screen, manager.bitmap.get_bitmap_debug(ppos, robot_path, manager.get_path()))
     pygame.display.update()
     # time.sleep(0.1)
+
+    events = pygame.event.get()
+    for event in events:
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                pygame.quit()
 
 pygame.quit()
 manager.bitmap.render_pixels_debug(robot_path)

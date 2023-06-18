@@ -165,11 +165,11 @@ class MazeBitmap:
         for i in range(image.size[0]):
             for j in range(image.size[1]):
                 pixel = self.pixels[i][j]
-                if (i, j) in robot_path:
-                    colour = (255, 255, 0)
-                elif (i, j) in self.wall_pixels:
-                    colour = (255, 0, 255)
-                elif pixel == PixelType.START:
+                # if (i, j) in robot_path:
+                #     colour = (255, 255, 0)
+                # elif (i, j) in self.wall_pixels:
+                #     colour = (255, 0, 255)
+                if pixel == PixelType.START:
                     colour = (0, 255, 0)
                 elif pixel == PixelType.END:
                     colour = (255, 0, 0)
