@@ -4,44 +4,52 @@ if (green>blue)
 	begin
 	if (red > green)
 		begin
-		assign value = red
-		assign cmin = blue
+		assign value = red;
+		assign cmin = blue;
 		end
 	else
 		begin
-		assign value = green
+		assign value = green;
 		if (red > blue)
-			assign cmin = blue
+			assign cmin = blue;
 		else
-			assign cmin = red
+			assign cmin = red;
 		end
 	end
 else
 	begin
 	if (red > blue)
 		begin
-		assign value = red
-		assign cmin = green
+		assign value = red;
+		assign cmin = green;
 		end
 	else
 		begin
-		assign value = blue
+		assign value = blue;
 		if (red > green)
-			assign cmin = green
+			assign cmin = green;
 		else
-			assign cmin = red
+			assign cmin = red;
 		end
 	end
 
 
-assign saturation = ((value - cmin) * 100 ))/ 250
+assign saturation = ((value - cmin) * 255 ))/(value);
 
 if (value==green)
-	assign hue = (30*(blue - red) + 60*(value - cmin))/(value - cmin)
+	assign hue = ((60*(blue - red) + 120*(value - cmin))/(value - cmin))>>1;
 else if (value==blue)
-	assign hue = (30*(red - green) + 120*(value - cmin))/(value - cmin)
+	assign hue = ((60*(red - green) + 240*(value - cmin))/(value - cmin))>>1;
 else
 	if (blue > green)
-		assign hue = (180*(value - cmin) - 30*(blue - green))/(value - cmin)
+		assign hue = ((360*(value - cmin) - 60*(blue - green))/(value - cmin))>>1;
 	else
-		assign hue = (30*(green - blue))/(value - cmin)
+		assign hue = ((60*(green - blue))/(value - cmin))>>1;
+
+//Detect Areas
+wire red_detect;
+wire blue_detect;
+wire yellow_detect;
+assign red_detect = ((hue > 175) || (hue < 5)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);
+assign blue_detect = ((hue > 110) && (hue < 120)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);
+assign yellow_detect = ((hue > 25) && (hue < 35)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);

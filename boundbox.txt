@@ -1,0 +1,55 @@
+// Highlight detected areas
+wire [23:0] red_high;
+assign grey = green[7:1] + red[7:2] + blue[7:2]; //Grey = green/2 + red/4 + blue/4
+assign red_high  =  red_detect ? {8'hff, 8'h0, 8'h0} : {grey, grey, grey};
+assign blue_high = blue_detect ? {8'h0, 8'h0, 8'hff} : {grey, grey, grey};
+assign yellow_high = yellow_detect ? {8'hff, 8'hff, 8'h0} : {grey, grey, grey};
+
+
+
+// Show bounding box
+wire [23:0] new_image_r;
+wire bb_active_r;
+assign bb_active_r = (x == left_r) | (x == right_r) | (y == top_r) | (y == bottom_r);
+assign new_image_r = bb_active_r ? bb_col_r : red_high;
+
+wire [23:0] new_image_y;
+wire bb_active_y;
+assign bb_active_y = (x == left_y) | (x == right_y) | (y == top_y) | (y == bottom_y);
+assign new_image_y = bb_active_y ? bb_col_y : yellow_high;
+
+wire [23:0] new_image_b;
+wire bb_active_b;
+assign bb_active_b = (x == left_b) | (x == right_b) | (y == top_b) | (y == bottom_b);
+assign new_image_b = bb_active_b ? bb_col_b : blue_high;
+
+//Process bounding box at the end of the frame.
+reg [3:0] msg_state;
+reg [10:0] left_r, right_r, top_r, bottom_r, left_b, right_b, top_b, bottom_b, left_g, right_g, top_g, bottom_g;
+reg [7:0] frame_count;
+always@(posedge clk) begin
+	if (eop & in_valid & packet_video) begin  //Ignore non-video packets
+		
+		//Latch edges for display overlay on next frame
+		left_r <= x_min_r;
+		right_r <= x_max_r;
+		top_r <= y_min_r;
+		bottom_r <= y_max_r;
+        left_g <= x_min_g;
+		right_g <= x_max_g;
+		top_g <= y_min_g;
+		bottom_g <= y_max_g;
+        left_b <= x_min_b;
+		right_b <= x_max_b;
+		top_b <= y_min_b;
+		bottom_b <= y_max_b;
+		
+		
+		//Start message writer FSM once every MSG_INTERVAL frames, if there is room in the FIFO
+		frame_count <= frame_count - 1;
+		
+		if (frame_count == 0 && msg_buf_size < MESSAGE_BUF_MAX - 27) begin
+			msg_state <= 4'b0001;
+			frame_count <= MSG_INTERVAL-1;
+		end
+	end
