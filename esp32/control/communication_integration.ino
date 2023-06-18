@@ -9,11 +9,11 @@
 ///-----LIGHT SENSOR PINS | START-----///
 #define F1 32 //A4
 #define F2 35 //A5
-#define F3 33 //A3
+#define F3 34 //A3
 // #define B1 33
 // #define B2 14
 // #define B3 4
-#define L 34 //soldered connection
+#define L 33 //soldered connection
 #define R 39 //soldered connection
 ///-----LIGHT SENSOR PINS | END-----///
 
@@ -152,7 +152,7 @@ double distance_moved(double wheel_speed) {
   return distance;
 }
 
-//Complementary filter for alpha
+//Complementary filter for alpha and theta
 const double COMPL_ALPHA = 0.98;
 const int filter_adjustment_interval = 500;
 double compl_alpha = 0;
@@ -164,6 +164,7 @@ double calibrateMPU(){
   }
   return compl_alpha;
 }
+double compl_theta = 0;
 
 //carries out appropriate actions once turning done
 //figure out what- send message to node? retrieve instructions from some stack?
@@ -208,7 +209,7 @@ void analogSample() {
 char printWhat = 'l';  //n for nothing, l for location, s for sensors
 void dataPrinter() {
   if (printWhat == 'l') {
-    Serial.println("theta : " + String(theta) + " | alpha : " + String(alpha) + " | compl_alpha : " + String(compl_alpha) + " | positionX : " + String(positionX) + " | positionY : " + String(positionY));
+    Serial.println("theta : " + String(theta) + " | compl_theta : " + String(compl_theta) + " | alpha : " + String(alpha) + " | positionX : " + String(positionX) + " | positionY : " + String(positionY));
   } else if (printWhat == 's') {
     Serial.println("L = " + String(lightL) + " | R = " + String(lightR) + " | F1 = " + String(lightF1) + " | F2 = " + String(lightF2) + " | F3 = " + String(lightF3));
   }
@@ -378,14 +379,14 @@ void setup() {
   Wire.begin();
   mpu.initialize();
   Serial.println(mpu.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
-  mpu.setXAccelOffset(-896);
-  mpu.setYAccelOffset(-838);
-  mpu.setZAccelOffset(1139);
-  mpu.setXGyroOffset(88);
-  mpu.setYGyroOffset(-48);
-  mpu.setZGyroOffset(19);
+  mpu.setXAccelOffset(-599);
+  mpu.setYAccelOffset(-1235);
+  mpu.setZAccelOffset(1196);
+  mpu.setXGyroOffset(94);
+  mpu.setYGyroOffset(-46);
+  mpu.setZGyroOffset(22);
 
-  alpha = calibrateMPU();
+  //alpha = calibrateMPU();
 
   pinMode(DIRR, OUTPUT);
   pinMode(DIRL, OUTPUT);
@@ -450,8 +451,8 @@ void ControlLoop(void* pvParameters) {
       //Sensor data
       mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
       //angle speeds in degrees/s
-      theta_dash = -gy / 131;
-      alpha_dash = gx / 131;
+      theta_dash = -gx / 131;
+      alpha_dash = -gz / 131;
       theta += sample_interval * theta_dash;
       alpha += sample_interval * alpha_dash;
 
@@ -463,6 +464,7 @@ void ControlLoop(void* pvParameters) {
         alpha = compl_alpha;
         k=0;
       }
+      compl_theta = 0.98*(compl_theta+gx*0.002/131)+0.02*atan(ay / sqrt(pow(ax, 2.0) + pow(az, 2.0)))*RAD_TO_DEG;
 
       //velocity and position in m/s and m. displacement is since last sample
       double displacement = distance_moved(control_speed);
@@ -592,19 +594,25 @@ void CommunicationsLoop(void* pvParameters) {
       lastSendMillis = millis();
 
       // JSON doc fixed memory allocation on stack
-      StaticJsonDocument<128> doc;
-      doc["type"] = "LDR";
+      StaticJsonDocument<256> doc;
+      doc["type"] = "Sensors";
       doc["time"] = millis();
 
       // store LDR readings in JSON array
-      JsonArray LDR_Array = doc.createNestedArray("LDR_Array");
-      LDR_Array.add(lightL);
-      LDR_Array.add(lightR);
-      LDR_Array.add(lightF1);
-      LDR_Array.add(lightF2);
-      LDR_Array.add(lightF3);
+      JsonArray Sense_Array = doc.createNestedArray("Sense_Array");
+      //POS- Dead reckoning position- X, Y
+      Sense_Array.add(positionX);
+      Sense_Array.add(positionY);
+      //ANGLE- alpha
+      Sense_Array.add(alpha);
+      //LDR array- L R F1 F2 F3
+      Sense_Array.add(lightL);
+      Sense_Array.add(lightR);
+      Sense_Array.add(lightF1);
+      Sense_Array.add(lightF2);
+      Sense_Array.add(lightF3);
 
-      char message[128];
+      char message[256];
       serializeJson(doc, message, sizeof(message));
       // Serial.println(message);
       webSocket.sendTXT(message);
