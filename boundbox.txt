@@ -5,23 +5,24 @@ assign red_high  =  red_detect ? {8'hff, 8'h0, 8'h0} : {grey, grey, grey};
 assign blue_high = blue_detect ? {8'h0, 8'h0, 8'hff} : {grey, grey, grey};
 assign yellow_high = yellow_detect ? {8'hff, 8'hff, 8'h0} : {grey, grey, grey};
 
-
-
 // Show bounding box
 wire [23:0] new_image_r;
 wire bb_active_r;
 assign bb_active_r = (x == left_r) | (x == right_r) | (y == top_r) | (y == bottom_r);
-assign new_image_r = bb_active_r ? bb_col_r : red_high;
+assign new_image_r = bb_active_r ? bb_col : red_high;
 
 wire [23:0] new_image_y;
 wire bb_active_y;
 assign bb_active_y = (x == left_y) | (x == right_y) | (y == top_y) | (y == bottom_y);
-assign new_image_y = bb_active_y ? bb_col_y : yellow_high;
+assign new_image_y = bb_active_y ? bb_col : yellow_high;
 
 wire [23:0] new_image_b;
 wire bb_active_b;
 assign bb_active_b = (x == left_b) | (x == right_b) | (y == top_b) | (y == bottom_b);
-assign new_image_b = bb_active_b ? bb_col_b : blue_high;
+assign new_image_b = bb_active_b ? bb_col : blue_high;
+
+wire [23:0] new_image;
+assign new_image = new_image_b | new_image_y | new_image_r;
 
 //Process bounding box at the end of the frame.
 reg [3:0] msg_state;
