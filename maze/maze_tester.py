@@ -243,9 +243,9 @@ while True:
     #             if pixels[j][k] == PixelType.WALL and math.dist([j, k], p) <= 0.15/PIXEL_RES:
     #                 raw_readings[i] += 1
     
-    front_light_raw = 0
-    left_light_raw = 0
-    right_light_raw = 0
+    f = 0
+    l = 0
+    r = 0
     for i in range(max(0, math.floor(ppos[0] - max(FRONT_RANGE, SIDE_RANGE)/PIXEL_RES)), min(math.ceil(ppos[0] + max(FRONT_RANGE, SIDE_RANGE)/PIXEL_RES) + 1, X_PIXELS)):
         for j in range(max(0, math.floor(ppos[1] - max(FRONT_RANGE, SIDE_RANGE)/PIXEL_RES)), min(math.ceil(ppos[1] + max(FRONT_RANGE, SIDE_RANGE)/PIXEL_RES) + 1, Y_PIXELS)):
             if pixels[i][j] == PixelType.WALL:
@@ -253,18 +253,18 @@ while True:
                 arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
                 adj_arg = (arg - angle) % 360
                 if dist <= FRONT_RANGE/PIXEL_RES and (adj_arg <= FRONT_ANGLE/2 or adj_arg >= 360 - FRONT_ANGLE/2):
-                    front_light_raw = 1000
+                    f = 1000
                 elif dist <= SIDE_RANGE/PIXEL_RES and adj_arg >= 90 - SIDE_ANGLE/2 and adj_arg <= 90 + SIDE_ANGLE/2:
-                    left_light_raw = 1000
+                    l = 1000
                 # elif dist <= FRONT_RANGE/PIXEL_RES and adj_arg >= 180 - FRONT_ANGLE/2 and adj_arg <= 180 + FRONT_ANGLE/2:
                 #     light[2] = True
                 elif dist <= SIDE_RANGE/PIXEL_RES and adj_arg >= 270 - SIDE_ANGLE/2 and adj_arg <= 270 + SIDE_ANGLE/2:
-                    right_light_raw = 1000
+                    r = 1000
     
     if iterations == 1:
         command = 'j'
     else:
-        command = manager.default_navigate((pos[0] + iterations*0.001, pos[1] + iterations*0.001), angle + iterations*0.01, front_light_raw, left_light_raw, right_light_raw)
+        command = manager.default_navigate((pos[0] + iterations*0.001, pos[1] + iterations*0.001), angle + iterations*0.01, f, f, f, l, r)
         # Simulate drift (linear w.r.t. time).
 
     if command == 'j':
@@ -300,16 +300,21 @@ while True:
         #         link_angles.append(math.degrees(math.pi/4 * i))
 
         # Simulate angles for triangulation.
-        beacon_dist = []
-        for i in range(3):
-            beacon_dist.append(math.dist(pos, manager.beacon_tri.beacon_pos[i]))
+        # beacon_dist = []
+        # for i in range(3):
+        #     beacon_dist.append(math.dist(pos, manager.beacon_tri.beacon_pos[i]))
+        # beacon_angles = []
+        # pairs = ((0, 1), (0, 2), (1, 2))
+        # for pair in pairs:
+        #     a = math.dist(manager.beacon_tri.beacon_pos[pair[0]], manager.beacon_tri.beacon_pos[pair[1]])
+        #     b = beacon_dist[pair[0]]
+        #     c = beacon_dist[pair[1]]
+        #     beacon_angles.append(math.degrees(math.acos((b**2 + c**2 - a**2)/(2*b*c))))
         beacon_angles = []
-        pairs = ((0, 1), (0, 2), (1, 2))
-        for pair in pairs:
-            a = math.dist(manager.beacon_tri.beacon_pos[pair[0]], manager.beacon_tri.beacon_pos[pair[1]])
-            b = beacon_dist[pair[0]]
-            c = beacon_dist[pair[1]]
-            beacon_angles.append(math.degrees(math.acos((b**2 + c**2 - a**2)/(2*b*c))))
+        for i in range(3):
+            diff = (manager.beacon_tri.beacon_pos[i][0] - pos[0], pos[1] - manager.beacon_tri.beacon_pos[i][1])
+            arg = (90 - (math.degrees(math.atan2(diff[1], diff[0])) % 360)) % 360
+            beacon_angles.append(arg)
         
         # Simulate turning the robot to face the first beacon.
         diff = (manager.beacon_tri.beacon_pos[0][0] - pos[0], pos[1] - manager.beacon_tri.beacon_pos[0][1])
@@ -319,17 +324,45 @@ while True:
         else:
             angle = -theta - 270
         
-        light_scan = []
+        # light_scan = []
+        # for i in range(SCAN_RES):
+        #     light_scan.append(0)
+        # for i in range(max(0, math.floor(ppos[0] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[0] + SCAN_RANGE/PIXEL_RES) + 1, X_PIXELS)):
+        #     for j in range(max(0, math.floor(ppos[1] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[1] + SCAN_RANGE/PIXEL_RES) + 1, Y_PIXELS)):
+        #         if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SCAN_RANGE/PIXEL_RES:
+        #             arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
+        #             adj_arg = (arg - angle) % 360
+        #             light_scan[int(adj_arg/360 * SCAN_RES)] = 1000
+        
+        # scan_angles = []
+        # scan_left = []
+        # for i in range(max(0, math.floor(ppos[0] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[0] + SCAN_RANGE/PIXEL_RES) + 1, X_PIXELS)):
+        #     for j in range(max(0, math.floor(ppos[1] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[1] + SCAN_RANGE/PIXEL_RES) + 1, Y_PIXELS)):
+        #         arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
+        #         adj_arg = (arg - angle) % 360
+        #         scan_angles.append((arg + 90) % 360)
+        #         if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SCAN_RANGE/PIXEL_RES:
+        #             # light_scan[int(adj_arg/360 * SCAN_RES)] = 1000
+        #             scan_left.append(1000)
+        #         else:
+        #             scan_left.append(0)
+
+        scan_angles = []
+        scan_left = []
         for i in range(SCAN_RES):
-            light_scan.append(0)
+            scan_angles.append(int(i / SCAN_RES * 360))
+            scan_left.append(0)
         for i in range(max(0, math.floor(ppos[0] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[0] + SCAN_RANGE/PIXEL_RES) + 1, X_PIXELS)):
             for j in range(max(0, math.floor(ppos[1] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[1] + SCAN_RANGE/PIXEL_RES) + 1, Y_PIXELS)):
                 if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SCAN_RANGE/PIXEL_RES:
                     arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
-                    adj_arg = (arg - angle) % 360
-                    light_scan[int(adj_arg/360 * SCAN_RES)] = 1000
+                    adj_arg = (arg - angle + 90) % 360
+                    scan_left[int(adj_arg/360 * SCAN_RES)] = 1000
+        # print(scan_angles)
+        # print(scan_left)
 
-        command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], light_scan)
+        # command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], light_scan)
+        command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], scan_angles, scan_left)
         # if command[0] == 'e':
         #     print('Reached end.')
         #     break
@@ -347,7 +380,7 @@ while True:
         angle += rotation # Apply rotation instantaneously.
     
     # Apply course correction.
-    if left_light_raw and right_light_raw: # If we are in a corridor.
+    if l and r: # If we are in a corridor.
         # Model the light sensor readings.
         closest_left = (math.inf, math.inf)
         closest_right = (math.inf, math.inf)

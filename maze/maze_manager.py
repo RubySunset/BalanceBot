@@ -2,6 +2,7 @@ from maze_tracker import *
 from maze_bitmap import *
 from beacon_tri import *
 from maze_db import *
+from light_cluster import *
 
 # Main class. Instantiate and use in other modules.
 class MazeManager:
@@ -16,9 +17,11 @@ class MazeManager:
     LINK_DIST = 0.15 # The distance we travel straight for after detecting a side link.
     FORCE_DIST = 0.05 # The distance we continue to force straight for after detecting a corridor.
 
-    FRONT_LIGHT_T = 300
-    SIDE_LIGHT_T = 300
-    SCAN_LIGHT_T = 300
+    FL_T = 720
+    FM_T = 710
+    FR_T = 700
+    L_T = 430
+    R_T = 340
 
     def __init__(self):
         self.tracker = MazeTracker()
@@ -117,7 +120,7 @@ class MazeManager:
     
     # Determine whether any action is needed whilst the robot travels through a passage.
     # Takes dead reckoning position and light sensor readings.
-    def default_navigate(self, dr_pos, dr_angle, front_light_raw, left_light_raw, right_light_raw):
+    def default_navigate(self, dr_pos, dr_angle, f_l, f_m, f_r, l, r):
 
         self.update_pos(dr_pos)
         self.update_angle(dr_angle)
@@ -126,9 +129,9 @@ class MazeManager:
             self.tracker.update_partial_path(self.robot_pos)
         
         # Apply thresholds to light readings.
-        front_light = front_light_raw >= self.FRONT_LIGHT_T
-        left_light = left_light_raw >= self.SIDE_LIGHT_T
-        right_light = right_light_raw >= self.SIDE_LIGHT_T
+        front_light = f_l >= self.FL_T or f_m >= self.FM_T or f_r >= self.FR_T
+        left_light = l >= self.L_T
+        right_light = r >= self.R_T
 
         # # Translate light readings to forwards/reverse-relative form.
         # if self.reverse_mode:
@@ -142,12 +145,12 @@ class MazeManager:
         if self.is_forcing and not self.is_force_delay and left_light and right_light:
             self.is_force_delay = True
             self.foo_pos = self.robot_pos # Use continuous position.
-            print('Start force delay at', self.robot_pos)
+            # print('Start force delay at', self.robot_pos)
         elif self.is_forcing and self.is_force_delay and math.dist(self.foo_pos, self.robot_pos) >= self.FORCE_DIST:
             self.is_forcing = False
             self.is_force_delay = False
             self.foo_pos = None
-            print('Stop forcing straight.')
+            # print('Stop forcing straight.')
 
         # if math.dist(pos, self.tracker.end) <= self.RES/2: # If we have reached the end, maybe?
         #     print('Possibly reached end.')
@@ -156,12 +159,12 @@ class MazeManager:
             if self.is_link_delay: # Reset link delay if one was active.
                 self.is_link_delay = False
                 self.temp_pos = None
-                print('Reset link delay.')
+                # print('Reset link delay.')
             if self.is_force_delay: # Reset force delay if one was active.
                 self.is_force_delay = False
                 self.foo_pos = None
-                print('Reset force delay.')
-            print('Boundary ahead - junction.')
+                # print('Reset force delay.')
+            # print('Boundary ahead - junction.')
             return 'j'
         # elif math.dist(pos, self.tracker.prev_vertex) < self.J_DIST: # Force straight after junction.
         #     return None
@@ -169,12 +172,12 @@ class MazeManager:
             if not self.is_link_delay:
                 self.is_link_delay = True
                 self.temp_pos = self.robot_pos # Use continuous position.
-                print('Start link delay at', self.robot_pos)
+                # print('Start link delay at', self.robot_pos)
                 return None
             elif math.dist(self.temp_pos, self.robot_pos) >= self.LINK_DIST:
                 self.is_link_delay = False
                 self.temp_pos = None
-                print('Link to side - junction.')
+                # print('Link to side - junction.')
                 return 'j'
             else:
                 return None
@@ -182,13 +185,13 @@ class MazeManager:
             if self.is_link_delay: # Abandon a link delay if there is one.
                 self.is_link_delay = False
                 self.temp_pos = None
-                print('Abandon link delay.')
+                # print('Abandon link delay.')
             return None
 
     # Generate a navigation command after a junction has been mapped.
     # Assume that at this point, the robot is facing towards the first beacon.
     # Output turning angle is given in degrees clockwise from north, [-180, 180].
-    def junction_navigate(self, alpha, beta, gamma, readings):
+    def junction_navigate(self, alpha, beta, gamma, angles, left):
 
         # Triangulate.
         self.robot_pos = self.beacon_tri.find_pos(alpha, beta, gamma)
@@ -197,56 +200,8 @@ class MazeManager:
 
         print('Vertex at', self.robot_pos)
 
-        # Convert light sensor readings to link angles.
-        light_scan = []
-        for reading in readings:
-            if reading >= self.SCAN_LIGHT_T:
-                light_scan.append(True)
-            else:
-                light_scan.append(False)
-        link_angles = []
-        counting = False
-        current_angle = self.robot_angle % 360 # Assume the scan starts and ends at the same angle.
-        track_angle = current_angle
-        scan_res = len(light_scan)
-        for i in range(scan_res):
-            current_angle += 360 / scan_res
-            current_angle %= 360
-            if not light_scan[i] and not counting:
-                counting = True
-                track_angle = current_angle
-                # current_angle = self.robot_angle + i/scan_res * 360
-            elif not light_scan[i] and counting:
-                track_angle += 0.5/scan_res * 360
-                track_angle %= 360
-            elif light_scan[i] and counting:
-                counting = False
-                track_angle += 0.5/scan_res * 360
-                track_angle %= 360
-                link_angles.append(track_angle)
-        if counting and not light_scan[0]:
-            # start = 2*current_angle - 360
-            # end = 2*link_angles[0] + 360
-            # link_angles.append(((start + end) / 2) % 360)
-            right_dist = abs(self.tracker.mod_diff(self.robot_angle % 360, link_angles[0], 360))
-            # left_dist = abs(self.tracker.mod_diff(self.robot_angle, current_angle) * 2)
-            link_angles.append((track_angle + right_dist) % 360)
-            link_angles.pop(0)
-        elif counting and light_scan[0]:
-            link_angles.append(track_angle)
-
-        # Rearrange link angles to have the first be closest to north.
-        closest_index = 0
-        closest_dist = math.inf
-        for i in range(len(link_angles)):
-            if abs(self.tracker.mod_diff(link_angles[i], 0, 360)) < closest_dist:
-                closest_index = i
-                closest_dist = abs(self.tracker.mod_diff(link_angles[i], 0, 360))
-        temp = []
-        for i in range(len(link_angles)):
-            temp.append(link_angles[(i + closest_index) % len(link_angles)])
-        link_angles = temp
-        print(link_angles)
+        link_angles = find_link_angles(left, self.robot_angle)
+        # link_angles = find_link_angles_cluster(self.robot_angle, angles, left)
 
         # # Translate angle to forwards/reverse-relative form.
         # if self.reverse_mode:
@@ -291,7 +246,7 @@ class MazeManager:
                 target_angle = self.tracker.dijkstra_navigate(v_pos)
         else:
             target_angle = self.tracker.discovery_navigate(v_pos, link_angles)
-        print('Target angle:', target_angle)
+        # print('Target angle:', target_angle)
 
         self.tracker.prev_vertex = v_pos # Update previous vertex.
         self.is_forcing = True # Force straight after reaching a junction (and turning).

@@ -17,6 +17,16 @@ class BeaconTri:
         self.beacon_pos = []
         self.beacon_dist = []
     
+    # Finds the difference between two numbers in modular arithmetic.
+    def mod_diff(self, a, b, mod):
+        diff = b - a
+        if diff <= -mod/2:
+            return diff + mod
+        elif diff > mod/2:
+            return diff - mod
+        else:
+            return diff
+    
     def set_beacons(self, beacon_pos):
         if len(beacon_pos) != self.NUM_BEACONS:
             raise ValueError('Wrong number of beacons.')
@@ -49,11 +59,14 @@ class BeaconTri:
         return (best_fit[0], best_fit[1])
     
     # Triangules position using three beacons.
-    # alpha is the angle between beacons 1 and 2.
-    # beta is the angle between beacons 1 and 3.
-    # gamma is the angle between beacons 2 and 3.
+    # alpha is the angle at beacon 1.
+    # beta is the angle at beacon 2.
+    # gamma is the angle at beacon 3.
     def find_pos(self, alpha, beta, gamma):
-        return self.find_pos_general([[alpha, beta], [gamma]])
+        a = self.mod_diff(alpha, beta, 360)
+        b = self.mod_diff(alpha, gamma, 360)
+        c = self.mod_diff(beta, gamma, 360)
+        return self.find_pos_general([[a, b], [c]])
     
     # Finds the angle based on position.
     # Note that we assume the robot is facing beacon 1 at this point.

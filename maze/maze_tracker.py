@@ -193,15 +193,15 @@ class MazeTracker:
     
     # Navigate during the discovery phase. Also apply an exit mark.
     def discovery_navigate(self, pos, link_angles):
-        print(self.explored_links[pos], self.num_links[pos], link_angles, pos)
         if self.num_links[pos] != len(link_angles):
             print('!!! Warning: current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(self.num_links[pos]) + ').')
             # Assume that the greater number of links is correct, for safety.
             if len(link_angles) > self.num_links[pos]:
                 self.num_links[pos] = len(link_angles)
         assert self.explored_links[pos] == len(self.a_list[pos])
-        assert self.explored_links[pos] <= self.num_links[pos]
-        if self.explored_links[pos] == self.num_links[pos]:
+        if self.explored_links[pos] > self.num_links[pos]:
+            print('!!! Warning: number of explored links exceeded total number of links.')
+        if self.explored_links[pos] >= self.num_links[pos]:
             tree, path = self.dijkstra(pos)
             min_dist = math.inf
             min_pos = None
