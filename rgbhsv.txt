@@ -1,4 +1,21 @@
 wire [7:0] hue, value, saturation, cmin;
+assign value = ((green>blue) ? ((red>green) ? red : green) : ((red>blue) ? red : blue ));
+assign cmin = ((green>blue) ? ((red>green) ? blue : ((red>blue) ? blue : red)) : ((red>blue) ? green : ((red>green) ? green : red)));
+
+assign saturation = ((value - cmin) * 255 ))/(value);
+
+assign hue = ((value==green) ? (((60*(blue - red) + 120*(value - cmin))/(value - cmin))>>1) : ((value==blue) ? (((60*(red - green) + 240*(value - cmin))/(value - cmin))>>1) : ((blue>green) : (((360*(value - cmin) - 60*(blue - green))/(value - cmin))>>1) : (((60*(green - blue))/(value - cmin))>>1))));
+
+//Detect Areas
+wire red_detect;
+wire blue_detect;
+wire yellow_detect;
+assign red_detect = ((hue > 175) || (hue < 5)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);
+assign blue_detect = ((hue > 110) && (hue < 120)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);
+assign yellow_detect = ((hue > 25) && (hue < 35)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);
+
+ONLY FOR REFERENCE BELOW
+
 
 if (green>blue)
 	begin
@@ -33,9 +50,6 @@ else
 		end
 	end
 
-
-assign saturation = ((value - cmin) * 255 ))/(value);
-
 if (value==green)
 	assign hue = ((60*(blue - red) + 120*(value - cmin))/(value - cmin))>>1;
 else if (value==blue)
@@ -45,11 +59,3 @@ else
 		assign hue = ((360*(value - cmin) - 60*(blue - green))/(value - cmin))>>1;
 	else
 		assign hue = ((60*(green - blue))/(value - cmin))>>1;
-
-//Detect Areas
-wire red_detect;
-wire blue_detect;
-wire yellow_detect;
-assign red_detect = ((hue > 175) || (hue < 5)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);
-assign blue_detect = ((hue > 110) && (hue < 120)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);
-assign yellow_detect = ((hue > 25) && (hue < 35)) & (saturation[7] && saturation[6]) & (value[7] && value[6]);
