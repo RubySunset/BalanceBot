@@ -7,10 +7,10 @@
 #include <MPU6050.h>
 
 // Ultrasonic sensor pins
-int trigPin = 16;
-int echoPin_F = 35;
+int trigPin = 36;
+int echoPin_F = 32;
 int echoPin_L = 33;
-int echoPin_R = 39;
+int echoPin_R = 35;
 
 // Motor pins
 const int STRR = 23;
