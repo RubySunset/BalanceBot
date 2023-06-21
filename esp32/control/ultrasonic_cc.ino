@@ -21,6 +21,9 @@ const int DIRL = 5;
 // Ultrasonic sensor variables - duration is in us, distance is in cm.
 float dur_F, dist_F, dur_L, dist_L, dur_R, dist_R;
 
+// For course-correction.
+float prev_dist_L = 10000, prev_dist_R = 10000;
+
 AccelStepper s1(AccelStepper::DRIVER, STRR, DIRR);  //STRR, DIRR
 AccelStepper s2(AccelStepper::DRIVER, STRL, DIRL);  //STRL, DIRL
 
@@ -147,89 +150,6 @@ void check_turning_finished(double alpha_error) {
   }
 }
 
-// //-----Course correction controller-----//
-// double get_distance(double x1, double y1, double x2, double y2) {
-//   return (sqrt(pow((x2 - x1), 2) + pow((y2 - y1), 2)));
-// }
-
-//gains
-// double P_CC = 0.3;
-// double I_CC = 0.0001;
-// double D_CC = 0.5;
-// double MAX_OFFSET = 60;     //max course correction, degrees
-// double UNBOUND_DIST = 0.5;  //distance for which unbounded CC is appled
-// // Unbounded CC ignores the condition imposed by MAX_OFFSET. in testing, I found that the robot tended to move
-// // better if it was allowed to course correct itself by larger amounts shortly after leaving a vertex
-
-// // CC controller variables
-// bool cc_active = false;
-// double cc_sum = 0;
-// double cc_prev_balance = 0;
-// double cc_prev_left_dist = 0;
-// double cc_prev_right_dist = 0;
-// double cc_offset = 0;
-// double cc_prev_vertex_x = 0;
-// double cc_prev_vertex_y = 0;
-// double cc_prev_width = 0;
-// double cc_alpha = 0;
-
-//Apply course correction. Returns the target angle, alpha
-// double course_correct() {
-//   //only apply course correction in a corridor
-//   if ((dist_L <= 25) && (dist_R <= 25)) {
-//     double balance = dist_L - dist_R;  //measure of closeness to right wall compared to left wall
-//     double width = dist_L - dist_R;    //estimated width of corridor
-
-//     if (cc_active) {
-//       //Rates of change of distances to respective walls
-//       double left_diff = dist_L - cc_prev_left_dist;
-//       double right_diff = dist_R - cc_prev_right_dist;
-
-//       if ((abs(width - cc_prev_width) < 30) && (abs(abs(left_diff) - abs(right_diff)) < 30)) {
-//         //A link to the side is inferred if:
-//         //1. The width of the passage is increasing rapidly
-//         //2. One wall is receeding much more quickly than the other
-//         //This condition also needs tuning
-//         cc_sum += balance;
-//         double diff = balance - cc_prev_balance;
-//         double delta = P_CC * balance + I_CC * cc_sum + D_CC * diff;
-//         // if (get_distance(cc_prev_vertex_x, cc_prev_vertex_y, positionX, positionY) <= UNBOUND_DIST) {
-//         //   //if we're close enough to the last vertex (aka likely junction), neglect to limit CC
-//         //   cc_alpha -= delta;
-//         // } else {
-//           cc_offset -= delta;
-//           if ((abs(cc_offset) <= MAX_OFFSET)) {
-//             cc_alpha -= delta;  //if we're within our allowance, proceed as normal
-//           } else if ((abs(cc_offset) >= MAX_OFFSET + delta)) {
-//             cc_offset += delta;  //if we're completely out, revert the change to cc_offset
-//           } else {
-//             //we can reduce delta to match the offset limit
-//             if (delta > 0) {
-//               delta -= abs(cc_offset) - MAX_OFFSET;
-//             } else {
-//               delta += abs(cc_offset) - MAX_OFFSET;
-//             }
-//             cc_alpha -= delta;
-//           }
-//         // }
-//       }
-//     }
-//     cc_active = true;
-//     cc_prev_balance = balance;
-//     cc_prev_left_dist = dist_L;
-//     cc_prev_right_dist = dist_R;
-//     cc_prev_width = width;
-//     return true
-//   } else {
-//     //Reset the variables once the controller is inative
-//     cc_active = false;
-//     cc_sum = 0;
-//     cc_offset = 0;
-//     return false
-//   }
-//   return cc_alpha;
-// }
-
 void setup() {
   // begin serial port
   Serial.begin (9600);
@@ -323,16 +243,38 @@ void loop() {
       positionX += displacement * sin(alpha * PI / 180);
       positionY += displacement * cos(alpha * PI / 180);
 
-      //Course-correction takes priority
-      if (movement_mode == 'm') {
+    //   // Basic course correction
+    //   if (movement_mode == 'm') {
+    //     if (dist_L <= 10) {
+    //         movement_mode = 't';
+    //         angle_setpoint = alpha + 10;
+    //     } else if (dist_R <= 10) {
+    //         movement_mode = 't';
+    //         angle_setpoint = alpha - 10;
+    //     }
+    //   }
+    // }
+
+    if (movement_mode == 'm') {
         if (dist_L <= 10) {
-            movement_mode = 't';
-            angle_setpoint = alpha + 10;
+            if (dist_L - prev_dist_L < 0) {
+                movement_mode = 't';
+                angle_setpoint = alpha + 5;
+                prev_dist_L = dist_L;
+            } else {
+                prev_dist_L = -10000;
+                prev_dist_R = 10000;
+            }
         } else if (dist_R <= 10) {
-            movement_mode = 't';
-            angle_setpoint = alpha - 10;
+            if (dist_R - prev_dist_R < 0) {
+                movement_mode = 't';
+                angle_setpoint = alpha - 5;
+                prev_dist_R = dist_R;
+            } else {
+                prev_dist_R = -10000;
+                prev_dist_L = 10000;
+            }
         }
-      }
     }
 
     // Assume stabilising wheels and frame attached
