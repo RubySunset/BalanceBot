@@ -20,8 +20,8 @@ class MazeManager:
     FL_T = 720
     FM_T = 710
     FR_T = 700
-    L_T = 430
-    R_T = 340
+    L_T = 420
+    R_T = 320
 
     def __init__(self):
         self.tracker = MazeTracker()
@@ -191,7 +191,7 @@ class MazeManager:
     # Generate a navigation command after a junction has been mapped.
     # Assume that at this point, the robot is facing towards the first beacon.
     # Output turning angle is given in degrees clockwise from north, [-180, 180].
-    def junction_navigate(self, alpha, beta, gamma, angles, left):
+    def junction_navigate(self, alpha, beta, gamma, angles, left, right):
 
         # Triangulate.
         self.robot_pos = self.beacon_tri.find_pos(alpha, beta, gamma)

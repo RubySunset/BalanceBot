@@ -172,7 +172,7 @@ def config8():
     walls.append(((1.5, 1.5), (1.5, 2)))
     walls.append(((1.5, 1.5), (2, 2)))
 
-config8()
+config5()
 
 pixels = []
 for i in range(X_PIXELS):
@@ -349,20 +349,24 @@ while True:
 
         scan_angles = []
         scan_left = []
+        scan_right = []
         for i in range(SCAN_RES):
             scan_angles.append(int(i / SCAN_RES * 360))
             scan_left.append(0)
+            scan_right.append(0)
         for i in range(max(0, math.floor(ppos[0] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[0] + SCAN_RANGE/PIXEL_RES) + 1, X_PIXELS)):
             for j in range(max(0, math.floor(ppos[1] - SCAN_RANGE/PIXEL_RES)), min(math.ceil(ppos[1] + SCAN_RANGE/PIXEL_RES) + 1, Y_PIXELS)):
                 if pixels[i][j] == PixelType.WALL and math.dist((i, j), ppos) <= SCAN_RANGE/PIXEL_RES:
                     arg = (90 - (math.degrees(math.atan2(ppos[1] - j, i - ppos[0])) % 360)) % 360
-                    adj_arg = (arg - angle + 90) % 360
-                    scan_left[int(adj_arg/360 * SCAN_RES)] = 1000
+                    left_arg = (arg - angle + 90) % 360
+                    scan_left[int(left_arg/360 * SCAN_RES)] = 1000
+                    right_arg = (arg - angle - 90) % 360
+                    scan_right[int(right_arg/360 * SCAN_RES)] = 1000
         # print(scan_angles)
         # print(scan_left)
 
         # command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], light_scan)
-        command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], scan_angles, scan_left)
+        command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], scan_angles, scan_left, scan_right)
         # if command[0] == 'e':
         #     print('Reached end.')
         #     break
@@ -461,7 +465,6 @@ while True:
     
     pygame.surfarray.blit_array(screen, manager.bitmap.get_bitmap_debug(ppos, robot_path, manager.get_path()))
     pygame.display.update()
-    # time.sleep(0.1)
 
     events = pygame.event.get()
     for event in events:

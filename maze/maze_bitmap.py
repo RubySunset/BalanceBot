@@ -165,8 +165,8 @@ class MazeBitmap:
         for i in range(image.size[0]):
             for j in range(image.size[1]):
                 pixel = self.pixels[i][j]
-                # if (i, j) in robot_path:
-                #     colour = (255, 255, 0)
+                if (i, j) in robot_path:
+                    colour = (0, 255, 255)
                 # elif (i, j) in self.wall_pixels:
                 #     colour = (255, 0, 255)
                 if pixel == PixelType.START:
@@ -194,6 +194,8 @@ class MazeBitmap:
         #     self.debug_pixel(self.img_pixels, pos, (0, 255, 255))
         foo = np.copy(self.img_pixels)
         self.debug_pixel(foo, pos, (0, 0, 255))
+        for pos in robot_path:
+            self.debug_pixel(foo, pos, (0, 255, 255))
         for pos in external_path:
             self.debug_pixel(foo, pos, (255, 255, 0))
         return foo

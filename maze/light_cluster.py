@@ -1,6 +1,6 @@
 import math
 
-SCAN_LIGHT_T = 300
+SCAN_LIGHT_T = 420
 
 # Finds the difference between two numbers in modular arithmetic.
 def mod_diff(a, b, mod):
@@ -124,35 +124,35 @@ def find_link_angles(readings, robot_angle):
 #     print(temp)
 #     return temp
 
-def get_link_angles_cluster(robot_angle, angles, left, right=None):
-    assert len(angles) == len(left)
-    if right != None:
-        assert len(left) == len(right)
-    num_angles = len(angles)
-    cluster = []
-    offset_link_angles = []
-    for i in range(num_angles):
-        if left[i] <= SCAN_LIGHT_T:
-            cluster.append((angles[i] - 90) % 360)
-        elif len(cluster) > 0:
-            offset_link_angles.append(mod_avg(cluster[0], cluster[-1], 360))
-            cluster.clear()
-    if len(cluster) > 0:
-        offset_link_angles.append(mod_avg(cluster[0], cluster[-1], 360))
-        cluster.clear()
-    if len(offset_link_angles) >= 2 and left[0] <= SCAN_LIGHT_T and left[-1] <= SCAN_LIGHT_T:
-        start_angle = offset_link_angles[0]
-        end_angle = offset_link_angles[-1]
-        offset_link_angles.pop(0)
-        offset_link_angles.pop()
-        offset_link_angles.append(mod_avg(start_angle, end_angle, 360))
-    temp = []
-    for angle in offset_link_angles:
-        temp.append((angle + robot_angle - angles[-1]) % 360)
-    print(angles)
-    print(left)
-    print(temp)
-    return temp
+# def get_link_angles_cluster(robot_angle, angles, left, right=None):
+#     assert len(angles) == len(left)
+#     if right != None:
+#         assert len(left) == len(right)
+#     num_angles = len(angles)
+#     cluster = []
+#     offset_link_angles = []
+#     for i in range(num_angles):
+#         if left[i] <= SCAN_LIGHT_T:
+#             cluster.append((angles[i] - 90) % 360)
+#         elif len(cluster) > 0:
+#             offset_link_angles.append(mod_avg(cluster[0], cluster[-1], 360))
+#             cluster.clear()
+#     if len(cluster) > 0:
+#         offset_link_angles.append(mod_avg(cluster[0], cluster[-1], 360))
+#         cluster.clear()
+#     if len(offset_link_angles) >= 2 and left[0] <= SCAN_LIGHT_T and left[-1] <= SCAN_LIGHT_T:
+#         start_angle = offset_link_angles[0]
+#         end_angle = offset_link_angles[-1]
+#         offset_link_angles.pop(0)
+#         offset_link_angles.pop()
+#         offset_link_angles.append(mod_avg(start_angle, end_angle, 360))
+#     temp = []
+#     for angle in offset_link_angles:
+#         temp.append((angle + robot_angle - angles[-1]) % 360)
+#     print(angles)
+#     print(left)
+#     print(temp)
+#     return temp
 
-def find_link_angles_cluster(robot_angle, angles, left, right=None):
-    return rearrange_link_angles(get_link_angles_cluster(robot_angle, angles, left, right))
+# def find_link_angles_cluster(robot_angle, angles, left, right=None):
+#     return rearrange_link_angles(get_link_angles_cluster(robot_angle, angles, left, right))
