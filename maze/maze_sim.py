@@ -30,7 +30,7 @@ class MazeSim:
     # Generate a bitmap representing the maze.
     walls = []
 
-    def config4(self):
+    def config1(self):
         self.walls.append(((0.5, 0), (0.5, 1.5)))
         self.walls.append(((0.5, 1.5), (1, 1.5)))
         self.walls.append(((1, 0.5), (1, 1)))
@@ -41,7 +41,7 @@ class MazeSim:
         self.walls.append(((1.5, 1), (2, 1)))
         self.walls.append(((2, 1), (2, 1.5)))
 
-    def config5(self):
+    def config2(self):
         self.walls.append(((0.5, 0.5), (0.5, 1)))
         self.walls.append(((0.5, 1), (1, 1)))
         self.walls.append(((0.5, 1.5), (1, 1.5)))
@@ -53,7 +53,7 @@ class MazeSim:
         self.walls.append(((2.5, 0.5), (2.5, 1)))
         self.walls.append(((2.5, 1.5), (3, 1.5)))
 
-    def config8(self):
+    def config3(self):
         self.walls.append(((0.5, 0.5), (1, 0.5)))
         self.walls.append(((0, 1), (1, 1)))
         self.walls.append(((1, 1), (1, 1.5)))
@@ -67,9 +67,16 @@ class MazeSim:
         self.walls.append(((1.5, 1.5), (1.5, 2)))
         self.walls.append(((1.5, 1.5), (2, 2)))
     
-    def __init__(self):
-
-        self.config8()
+    def __init__(self, config_num):
+        
+        if config_num == 1:
+            self.config1()
+        elif config_num == 2:
+            self.config2()
+        elif config_num == 3:
+            self.config3()
+        else:
+            raise ValueError('Incorrect config number.')
         self.WALL_WIDTH = 0.08
         self.X_LIM = 3
         self.Y_LIM = 2
@@ -258,7 +265,7 @@ class MazeSim:
         return True
 
 if __name__ == '__main__':
-    sim = MazeSim()
+    sim = MazeSim(3)
     pygame.init()
     screen = pygame.display.set_mode((sim.X_PIXELS * sim.pp, sim.Y_PIXELS * sim.pp))
     while sim.update():
@@ -273,8 +280,3 @@ if __name__ == '__main__':
                     pygame.quit()
     pygame.quit()
     sim.manager.bitmap.render_pixels_debug(sim.walls, sim.WALL_WIDTH)
-
-    # sim = MazeSim()
-    # while sim.update():
-    #     edges = sim.manager.get_edges()
-    #     ...
