@@ -18,9 +18,10 @@ class MazeBitmap:
     PIXEL_RES = 0.01 # How many metres a single pixel is.
     WIDTH = 0 # The width of passages in standard units.
 
-    def __init__(self, X_LIM, Y_LIM):
+    def __init__(self, X_LIM, Y_LIM, pp):
         self.X_LIM = X_LIM
         self.Y_LIM = Y_LIM
+        self.pp = pp
         self.X_PIXELS = int(self.X_LIM / self.PIXEL_RES) + 1 # The number of pixels in the x direction.
         self.Y_PIXELS = int(self.Y_LIM / self.PIXEL_RES) + 1 # The number of pixels in the y direction.
         self.P_WIDTH = self.WIDTH / self.PIXEL_RES # The width of passages in pixels.
@@ -32,7 +33,7 @@ class MazeBitmap:
             self.pixels.append(pixel_row)
         # self.painted_links = [] # Pairs of vertices whose links have already been painted.
         self.wall_pixels = []
-        self.img_pixels = np.zeros((self.X_PIXELS * 3, self.Y_PIXELS * 3, 3))
+        self.img_pixels = np.zeros((self.X_PIXELS * self.pp, self.Y_PIXELS * self.pp, 3))
     
     # Reset to initial state.
     def reset(self):
@@ -44,16 +45,16 @@ class MazeBitmap:
             self.pixels.append(pixel_row)
         # self.painted_links = []
         self.wall_pixels = []
-        self.img_pixels = np.zeros((self.X_PIXELS * 3, self.Y_PIXELS * 3, 3))
+        self.img_pixels = np.zeros((self.X_PIXELS * self.pp, self.Y_PIXELS * self.pp, self.pp))
     
     # Convert a point in metres (standard units) to pixels.
     def to_pixels(self, point):
         return (round(point[0] / self.PIXEL_RES), round(point[1] / self.PIXEL_RES))
 
     def debug_pixel(self, array, pos, colour):
-        for i in range(3):
-            for j in range(3):
-                array[3*pos[0] + i][3*pos[1] + j] = colour
+        for i in range(self.pp):
+            for j in range(self.pp):
+                array[self.pp*pos[0] + i][self.pp*pos[1] + j] = colour
     
     # Set a starting point.
     def set_start(self, pos):
@@ -154,20 +155,20 @@ class MazeBitmap:
                             self.wall_pixels.append((j, k))
                 current = [current[i] + unit_diff[i] for i in range(2)]
         for pos in self.wall_pixels:
-            for x in range(3):
-                for y in range(3):
-                    self.img_pixels[3*pos[0] + x][3*pos[1] + y] = (255, 0, 255)
+            for x in range(self.pp):
+                for y in range(self.pp):
+                    self.img_pixels[self.pp*pos[0] + x][self.pp*pos[1] + y] = (255, 0, 255)
     
     # Render the pixel array, with the actual walls overlaid on top.
-    def render_pixels_debug(self, robot_path):
+    def render_pixels_debug(self, walls, width):
         image = Image.new('RGB', (self.X_PIXELS, self.Y_PIXELS))
         img_pixels = image.load()
         for i in range(image.size[0]):
             for j in range(image.size[1]):
                 pixel = self.pixels[i][j]
-                if (i, j) in robot_path:
-                    colour = (0, 255, 255)
-                # elif (i, j) in self.wall_pixels:
+                # if (i, j) in robot_path:
+                #     colour = (0, 255, 255)
+                # if (i, j) in self.wall_pixels:
                 #     colour = (255, 0, 255)
                 if pixel == PixelType.START:
                     colour = (0, 255, 0)
@@ -186,6 +187,20 @@ class MazeBitmap:
                 else:
                     raise ValueError('Incorrect pixel value: ' + str(pixel) + ' at ' + str((i, j)) + '.')
                 img_pixels[i, j] = colour
+        for wall in walls:
+            p1 = self.to_pixels(wall[0])
+            p2 = self.to_pixels(wall[1])
+            diff = [p2[i] - p1[i] for i in range(2)] # Find the difference vector.
+            p_dist = math.ceil(math.dist(p1, p2)) # Choose the upper bound on the length of the wall.
+            unit_diff = [diff[i] / p_dist for i in range(2)] # Normalise the difference vector to get the direction.
+            current = [p1[0], p1[1]]
+            for i in range(p_dist + 1):
+                c = [round(x) for x in current]
+                for j in range(max(0, math.floor(c[0] - width/self.PIXEL_RES)), min(math.ceil(c[0] + width/self.PIXEL_RES) + 1, self.X_PIXELS)):
+                    for k in range(max(0, math.floor(c[1] - width/self.PIXEL_RES)), min(math.ceil(c[1] + width/self.PIXEL_RES) + 1, self.Y_PIXELS)):
+                        if math.dist(c, (j, k)) <= width/self.PIXEL_RES:
+                            img_pixels[j, k] = (255, 0, 255)
+                current = [current[i] + unit_diff[i] for i in range(2)]
         image.show()
     
     # Convert the bitmap into an array of colours.
@@ -196,8 +211,11 @@ class MazeBitmap:
         self.debug_pixel(foo, pos, (0, 0, 255))
         for pos in robot_path:
             self.debug_pixel(foo, pos, (0, 255, 255))
-        for pos in external_path:
-            self.debug_pixel(foo, pos, (255, 255, 0))
+        try:
+            for pos in external_path:
+                self.debug_pixel(foo, pos, (255, 255, 0))
+        except:
+            pass
         return foo
 
 if __name__ == '__main__':

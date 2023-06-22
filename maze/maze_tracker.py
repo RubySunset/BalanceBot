@@ -5,9 +5,8 @@ import random
 # Main class. Instantiate and use in other modules.
 class MazeTracker:
 
-    MIN_DIST = 0.3 # The minimum distance between two vertices in metres.
-
-    def __init__(self):
+    def __init__(self, MIN_DIST):
+        self.MIN_DIST = MIN_DIST # The minimum distance between two vertices in metres.
         self.a_list = {} # Adjacency list to store the maze graph. Vertices are stored by their positions.
         # self.marks = {} # A mapping from vertex positions to lists of link marks.
         self.num_links = {} # The total number of links for each vertex.
@@ -133,18 +132,18 @@ class MazeTracker:
             self.explored_links[self.start] = 0
             return self.start
         last_vertex = self.prev_vertex
-        b = math.dist(pos, self.prev_vertex)
-        dist = b
-        for v in self.a_list:
-            if v in (self.prev_vertex, pos):
-                continue
-            c = math.dist(pos, v)
-            a = math.dist(self.prev_vertex, v)
-            alpha = math.degrees(math.acos((b**2 + c**2 - a**2) / (2*b*c)))
-            d = math.dist(pos, v)
-            if d < dist and alpha <= 10:
-                last_vertex = v
-                dist = d
+        # b = math.dist(pos, self.prev_vertex)
+        # dist = b
+        # for v in self.a_list:
+        #     if v in (self.prev_vertex, pos):
+        #         continue
+        #     c = math.dist(pos, v)
+        #     a = math.dist(self.prev_vertex, v)
+        #     alpha = math.degrees(math.acos((b**2 + c**2 - a**2) / (2*b*c)))
+        #     d = math.dist(pos, v)
+        #     if d < dist and alpha <= 10:
+        #         last_vertex = v
+        #         dist = d
         if math.dist(pos, self.start) <= self.MIN_DIST:
             if last_vertex != self.start:
                 if last_vertex not in self.a_list[self.start]:
