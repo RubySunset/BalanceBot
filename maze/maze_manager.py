@@ -105,7 +105,7 @@ class MazeManager:
     
     # Gets the best estimate of the robot's position in degrees.
     def get_angle(self):
-        return self.bitmap.to_pixels(self.robot_angle)
+        return self.robot_angle
     
     # Update the best estimate of the robot's current angle using the dead-reckoning measurement.
     def update_angle(self, dr_angle):
