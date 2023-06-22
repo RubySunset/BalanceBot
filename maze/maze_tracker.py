@@ -18,6 +18,8 @@ class MazeTracker:
         # When the robot is still traversing the maze, this is the shortest path from the start to the robot.
         # When the robot has reached the end and has surveyed the entire maze, this is the shortest path from start to end.
         self.prev_entry_link = None
+        self.pp_tree = None
+        self.pp_next = None
     
     # Reset to initial state.
     def reset(self):
@@ -30,6 +32,8 @@ class MazeTracker:
         self.end = None
         self.external_path = []
         self.prev_entry_link = None
+        self.pp_tree = None
+        self.pp_next = None
     
     # Finds the difference between two numbers in modular arithmetic.
     def mod_diff(self, a, b, mod):
@@ -100,7 +104,7 @@ class MazeTracker:
             while node != None:
                 shortest_path.insert(0, node)
                 node = prev[node]
-        return distance, shortest_path
+        return distance, shortest_path, prev
     
     # Try to find a vertex near enough to the given position.
     def find_vertex(self, pos):
@@ -125,7 +129,7 @@ class MazeTracker:
 
     # Visit a vertex, updating the relevant graph structures.
     # Assume all angles are taken clockwise from north in the range [0, 360].
-    def visit_vertex(self, pos, link_angles):
+    def visit_vertex(self, pos, link_angles, is_discovered):
         if self.prev_vertex == None: # If we are at the first iteration.
             self.a_list[self.start] = set()
             self.num_links[self.start] = len(link_angles)
@@ -168,9 +172,12 @@ class MazeTracker:
                     self.explored_links[last_vertex] += 1
             return self.end
         elif math.dist(pos, last_vertex) <= self.MIN_DIST: # If we are at the same vertex.
-            avg_pos = (round((pos[0] + last_vertex[0]) / 2, 3), round((pos[1] + last_vertex[1]) / 2, 3))
-            self.replace_vertex(last_vertex, avg_pos)
-            return avg_pos
+            if is_discovered:
+                return last_vertex
+            else:
+                avg_pos = (round((pos[0] + last_vertex[0]) / 2, 3), round((pos[1] + last_vertex[1]) / 2, 3))
+                self.replace_vertex(last_vertex, avg_pos)
+                return avg_pos
         else:
             near_v = self.find_vertex(pos)
             if near_v == None:
@@ -181,17 +188,21 @@ class MazeTracker:
                 self.explored_links[last_vertex] += 1
                 return pos
             else:
-                avg_pos = (round((near_v[0] + pos[0]) / 2, 3), round((near_v[1] + pos[1]) / 2, 3))
-                self.replace_vertex(near_v, avg_pos)
-                if last_vertex not in self.a_list[avg_pos]:
-                    self.explored_links[avg_pos] += 1
+                if is_discovered:
+                    this_pos = near_v
+                else:
+                    this_pos = (round((near_v[0] + pos[0]) / 2, 3), round((near_v[1] + pos[1]) / 2, 3))
+                    self.replace_vertex(near_v, this_pos)
+                if last_vertex not in self.a_list[this_pos]:
+                    self.explored_links[this_pos] += 1
                     self.explored_links[last_vertex] += 1
-                self.a_list[last_vertex].add(avg_pos)
-                self.a_list[avg_pos].add(last_vertex)
-                return avg_pos
+                self.a_list[last_vertex].add(this_pos)
+                self.a_list[this_pos].add(last_vertex)
+                return this_pos
     
     # Navigate during the discovery phase. Also apply an exit mark.
     def discovery_navigate(self, pos, link_angles):
+        self.pp_next = None
         if self.num_links[pos] != len(link_angles):
             print('!!! Warning: current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(self.num_links[pos]) + ').')
             # Assume that the greater number of links is correct, for safety.
@@ -201,7 +212,7 @@ class MazeTracker:
         if self.explored_links[pos] > self.num_links[pos]:
             print('!!! Warning: number of explored links exceeded total number of links.')
         if self.explored_links[pos] >= self.num_links[pos]:
-            tree, path = self.dijkstra(pos)
+            tree, path, prev = self.dijkstra(pos)
             min_dist = math.inf
             min_pos = None
             for v in self.a_list:
@@ -211,8 +222,9 @@ class MazeTracker:
             if min_pos == None:
                 return random.random() * 360
             else:
-                tree, path = self.dijkstra(pos, min_pos)
+                tree, path, prev = self.dijkstra(pos, min_pos)
                 target_pos = path[1]
+                self.pp_next = target_pos
                 diff = (target_pos[0] - pos[0], pos[1] - target_pos[1])
                 target_angle = (90 - math.degrees(math.atan2(diff[1], diff[0]))) % 360
                 if len(link_angles) == self.num_links[pos]:
@@ -242,7 +254,7 @@ class MazeTracker:
     
     # Navigate after the discovery phase using Dijkstra.
     def dijkstra_navigate(self, pos):
-        tree, path = self.dijkstra(pos, self.end)
+        tree, path, prev = self.dijkstra(pos, self.end)
         target_pos = path[1]
         # diff = [target_pos[i] - pos[i] for i in range(2)]
         diff = (target_pos[0] - pos[0], pos[1] - target_pos[1])
@@ -251,22 +263,33 @@ class MazeTracker:
     # Generate the complete shortest path from start to end, for the front-end to display
     # once the robot has finished the discovery phase.
     def generate_complete_path(self):
-        tree, self.external_path = self.dijkstra(self.start, self.end)
+        tree, self.external_path, prev = self.dijkstra(self.start, self.end)
     
     # Generate the shortest path from start to robot's position, for the front-end to display
     # while the robot is still in the discovery phase.
     def generate_partial_path(self, disc_pos, cont_pos):
-        tree, self.external_path = self.dijkstra(self.start, disc_pos)
+        self.pp_tree, self.external_path, self.pp_prev = self.dijkstra(self.start, disc_pos)
         self.external_path.append(cont_pos)
     
     # Update the external path with the robot's current position.
     def update_partial_path(self, pos):
-        self.external_path.pop()
-        self.external_path.append(pos)
+        if self.pp_next == None:
+            self.external_path.pop()
+            self.external_path.append(pos)
+        else:
+            dist_1 = self.pp_tree[self.prev_vertex] + math.dist(self.prev_vertex, pos)
+            dist_2 = self.pp_tree[self.pp_next] + math.dist(self.pp_next, pos)
+            if dist_1 < dist_2 or self.external_path[-2] == self.pp_next:
+                self.external_path.pop()
+                self.external_path.append(pos)
+            else:
+                self.external_path.pop()
+                self.external_path.pop()
+                self.external_path.append(pos)
 
     # Test to see if we have discovered enough of the maze to determine the shortest path.
     def enough_discovered(self):
-        dist_tree, path = self.dijkstra(self.start, self.end)
+        dist_tree, path, prev = self.dijkstra(self.start, self.end)
         for v in self.a_list:
             if self.explored_links[v] < self.num_links[v] and dist_tree[v] + math.dist(v, self.end) < dist_tree[self.end]:
                 # If there could exist a shorter path to the end via this vertex.

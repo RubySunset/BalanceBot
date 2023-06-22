@@ -202,7 +202,6 @@ class MazeManager:
         # link_angles = find_link_angles(left, self.robot_angle)
         # link_angles = find_link_angles_cluster(self.robot_angle, angles, left)
         link_angles = find_link_angles(angles, left_dist, right_dist, self.robot_angle)
-        print(link_angles)
 
         # # Translate angle to forwards/reverse-relative form.
         # if self.reverse_mode:
@@ -224,7 +223,7 @@ class MazeManager:
                 return 'e'
         
         # Update relevant data structures.
-        v_pos = self.tracker.visit_vertex(self.robot_pos, link_angles) # Update graph structures.
+        v_pos = self.tracker.visit_vertex(self.robot_pos, link_angles, self.is_discovered) # Update graph structures.
         self.bitmap.update_pixels(self.tracker.a_list) # Update bitmap.
         if not self.is_discovered: # Update external path in discovery phase.
             self.tracker.generate_partial_path(v_pos, self.robot_pos)
