@@ -167,8 +167,8 @@ class MazeSim:
             if self.iterations == 1:
                 command = 'j'
             else:
-                # command = self.manager.default_navigate((self.pos[0] + self.iterations*0.001, self.pos[1] + self.iterations*0.001), self.angle + self.iterations*0.01, pixel_dist[0], pixel_dist[1], pixel_dist[2])
-                command = self.manager.default_navigate((self.pos[0], self.pos[1]), self.angle, pixel_dist[0], pixel_dist[1], pixel_dist[2])
+                command = self.manager.default_navigate((self.pos[0] + self.iterations*0.001, self.pos[1] + self.iterations*0.001), self.angle + self.iterations*0.01, pixel_dist[0], pixel_dist[1], pixel_dist[2])
+                # command = self.manager.default_navigate((self.pos[0], self.pos[1]), self.angle, pixel_dist[0], pixel_dist[1], pixel_dist[2])
                 # Simulate drift (linear w.r.t. time).
 
             if command == 'j':
