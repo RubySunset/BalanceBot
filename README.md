@@ -1,1 +1,1 @@
-This branch of the repo is dedicated to testing and refinement of the control for the robot, along with integrations of (mainly) Command and Vision.
+This branch of the repo is dedicated to testing and refinement of the control for the robot, along with integrations with (mainly) Command and Vision.
