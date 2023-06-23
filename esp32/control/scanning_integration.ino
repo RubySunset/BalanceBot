@@ -18,7 +18,7 @@
 ///-----LIGHT SENSOR PINS | END-----///
 
 ///-----CONTROL GLOBALS & FUNCTIONS | START----///
-bool STABILITY_MODE = true;  //IF STABILITY MODE IS TRUE, STABILISING FRAME ATTACHED TO ROBOT
+bool STABILITY_MODE = false;  //IF STABILITY MODE IS TRUE, STABILISING FRAME ATTACHED TO ROBOT
 
 /* CHANGED BC NOT ENOUGH PINS
 const int STRR = 27;
@@ -103,7 +103,7 @@ int cycle_number = 0;  //temp variable
 
 //These parameters (apart from theta_setpoint) will be controlled by commands received from higher levels
 double theta_setpoint = 0;
-double velocity_setpoint = -3;
+double velocity_setpoint = 0;
 double angle_setpoint = 0;  //decide that clockwise is positive direction; so ranges from 0 to 360 degrees
 
 void setSpeed(int r, int l) {
@@ -344,19 +344,13 @@ double course_correct(/*pos, alpha, LDR readings are already global variables*/)
 double redBeaconAngle = -1;
 double yellowBeaconAngle = -1;
 double blueBeaconAngle = -1;
-double startingAngle = 0;
+double scan_array_angles[72];
+int scan_array_left_light [72];
+int scan_array_right_light [72];
+double lastScanAngle = 0;
+int angle_array_index = 0;
 double normaliseAngle(double givenAngle) {
-  bool angleUnnormalised = true;
-  while (angleUnnormalised) {
-    if ((0 <= givenAngle) && (givenAngle < 360)) {
-      angleUnnormalised = false;
-    } else if (givenAngle < 0) {
-      givenAngle += 360;
-    } else if (givenAngle >= 360) {
-      givenAngle -= 360;
-    }
-  }
-  return givenAngle;
+  return givenAngle % 360;
 }
 void startBeaconScan() {
   sendingMode = 'n';
@@ -395,8 +389,18 @@ void check_for_beacon() {
   }
   if ((foundBeacon = true) && (scanningMode = 'b')) {  //case when just found first beacon
     alpha = normaliseAngle(alpha);
+    lastScanAngle = alpha;
+    angle_array_index = 0;
     angle_setpoint = alpha + 360;
     scanningMode = 's';
+  }
+  if(((abs(alpha-lastScanAngle)) > 5) && (scanningMode = 's')){
+    scan_array_angles[angle_array_index] = alpha;
+    scan_array_left_light[angle_array_index] = lightL;
+    scan_array_right_light[angle_array_index] = lightR;
+    angle_array_index += 1;
+    if(angle_array_index >= 72) angle_array_index -= 72;
+    lastScanAngle = alpha;
   }
 }
 ///-----CONTROL GLOBALS & FUNCTIONS | END-----///
@@ -493,7 +497,7 @@ void setup() {
     Serial.println("Connected to WiFi");
 
     // server address, port and URL
-    webSocket.begin("13.43.40.216", 8000, "/ws/rover");
+    webSocket.begin("api.balancebot.site", 8000, "/ws/rover");
 
     // event handler
     webSocket.onEvent(webSocketEvent);
@@ -553,7 +557,7 @@ void ControlLoop(void* pvParameters) {
 
       //comment out when not debugging
       //dataPrinter();
-      Serial.println(alpha);
+      //Serial.println(alpha);
 
       //Course-correction takes priority, comment out line below to disable
       double course_correction_setpoint = course_correct();
@@ -565,42 +569,42 @@ void ControlLoop(void* pvParameters) {
       //LDR-BASED WALL AVOIDANCE FAILSAFE
       //- Needs much more work, but should stop crashes
       //- Better to rely on wall detection controller EDIT: this is our only obstacle avoidance now. godspeed
-      char obstacle_direction = 'n';
-      obstacle_direction = obstacleDetected();
-      switch (obstacle_direction) {
-        case 'f':
-          velocity_setpoint = 0;
-          if (!avoiding_obstacle) previous_movement_mode = movement_mode;
-          movement_mode = 'm';
-          avoiding_obstacle = true;
-          break;
-        case 'b':
-          velocity_setpoint = 1;
-          if (!avoiding_obstacle) previous_movement_mode = movement_mode;
-          movement_mode = 'm';
-          avoiding_obstacle = true;
-          break;
-        case 'l':
-          if (!avoiding_obstacle | finished_turning) {
-            previous_movement_mode = movement_mode;
-            angle_setpoint += 10;
-            movement_mode = 't';
-            avoiding_obstacle = true;
-          }
-          break;
-        case 'r':
-          if (!avoiding_obstacle | finished_turning) {
-            previous_movement_mode = movement_mode;
-            angle_setpoint -= 10;
-            movement_mode = 't';
-            avoiding_obstacle = true;
-          }
-          break;
-        case 'n':
-          avoiding_obstacle = false;
-          movement_mode = previous_movement_mode;
-          break;
-      }
+      // char obstacle_direction = 'n';
+      // obstacle_direction = 'n'; //obstacleDetected();
+      // switch (obstacle_direction) {
+      //   case 'f':
+      //     velocity_setpoint = 0;
+      //     if (!avoiding_obstacle) previous_movement_mode = movement_mode;
+      //     movement_mode = 'm';
+      //     avoiding_obstacle = true;
+      //     break;
+      //   case 'b':
+      //     velocity_setpoint = 1;
+      //     if (!avoiding_obstacle) previous_movement_mode = movement_mode;
+      //     movement_mode = 'm';
+      //     avoiding_obstacle = true;
+      //     break;
+      //   case 'l':
+      //     if (!avoiding_obstacle | finished_turning) {
+      //       previous_movement_mode = movement_mode;
+      //       angle_setpoint += 10;
+      //       movement_mode = 't';
+      //       avoiding_obstacle = true;
+      //     }
+      //     break;
+      //   case 'r':
+      //     if (!avoiding_obstacle | finished_turning) {
+      //       previous_movement_mode = movement_mode;
+      //       angle_setpoint -= 10;
+      //       movement_mode = 't';
+      //       avoiding_obstacle = true;
+      //     }
+      //     break;
+      //   case 'n':
+      //     avoiding_obstacle = false;
+      //     movement_mode = previous_movement_mode;
+      //     break;
+      // }
 
       //When stabilising wheels and frame attached
       if (STABILITY_MODE == true) {
@@ -629,12 +633,12 @@ void ControlLoop(void* pvParameters) {
           velocity_setpoint = 0;
         }
         if (movement_mode == 'm') {
-          theta_setpoint = simple_PID_calc(sample_interval, 0 /*velocity_setpoint*/, sensed_speed, 1, 1, 0, 0);
+          theta_setpoint = simple_PID_calc(sample_interval, velocity_setpoint, sensed_speed, 1, 1, 0, 0);
         }
 
         //theta_dash control- always necessary, present in both of other modes too
         //tune the compl_theta-16 value between 16.5-15.5, depending on the setup, but I think cascaded outer loop would also solve the slight drift; more I value makes the system less responsive so this might be better lower
-        control_speed = simple_PID_calc(sample_interval, theta_setpoint, compl_theta - 16, 0, 2.1, 0.05, 0.01);
+        control_speed = simple_PID_calc(sample_interval, theta_setpoint, compl_theta - 16, 0, 2.1, 0.04, 0.01);
         speed_right = control_speed;
         speed_left = control_speed;
 
@@ -708,6 +712,15 @@ void CommunicationsLoop(void* pvParameters) {
         Beacon_Array.add(redBeaconAngle);
         Beacon_Array.add(yellowBeaconAngle);
         Beacon_Array.add(blueBeaconAngle);
+
+        JsonArray Sample_Angle_Array = doc.createNestedArray("Sample_Angle_Array");
+        JsonArray Left_Scan_Array = doc.createNestedArray("Left_Scan_Array");
+        JsonArray Right_Scan_Array = doc.createNestedArray("Right_Scan_Array");
+        for(int i = 72; i = 0; i++){
+          Sample_Angle_Array.add(scan_array_angles[i]);
+          Left_Scan_Array.add(scan_array_left_light[i]);
+          Right_Scan_Array.add(scan_array_right_light[i]);
+        }
       } else if (sendingMode == 'n') {
         //send nothing but record LDR and angle arrays
       }
@@ -744,14 +757,14 @@ void handleReceivedText(char* payload) {
 void handleMovement(const char* message, double value) {
   if (strcmp(message, "turn") == 0) {
     movement_mode = 't';
-    angle_setpoint += value;
+    angle_setpoint = normaliseAngle(angle_setpoint + value);
   }
   if (strcmp(message, "stabiliser") == 0) {
     STABILITY_MODE = !STABILITY_MODE;
   }
   if (strcmp(message, "move") == 0) {
     movement_mode = 'm';
-    velocity_setpoint = 1;
+    velocity_setpoint = -3;
   }
   if (strcmp(message, "stop") == 0) {
     movement_mode = 'm';
