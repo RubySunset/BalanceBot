@@ -66,7 +66,7 @@ class MazeSim:
         self.walls.append(((1.5, 1.5), (1.5, 2)))
         self.walls.append(((1.5, 1.5), (2, 2)))
     
-    def __init__(self, config_num, send_to_db=False):
+    def __init__(self, config_num, send_to_db=False, cycles=1):
         
         if config_num == 1:
             self.config1()
@@ -76,6 +76,8 @@ class MazeSim:
             self.config3()
         else:
             raise ValueError('Incorrect config number.')
+        self.cycles = cycles
+
         self.WALL_WIDTH = 0.08
         self.X_LIM = 3
         self.Y_LIM = 2
@@ -143,123 +145,126 @@ class MazeSim:
 
     def update(self):
 
-        self.iterations += 1
+        for cycle in range(self.cycles):
 
-        pixel_dist = [1000, 1000, 1000]
-        sensor_range = (self.FRONT_RANGE, self.SIDE_RANGE, self.SIDE_RANGE)
-        add_angle = (0, -90, 90)
-        for i in range(3):
-            sensor_angle = (self.angle + add_angle[i]) % 360
-            unit_v = (math.sin(math.radians(sensor_angle)), -math.cos(math.radians(sensor_angle)))
-            current = [self.ppos[0], self.ppos[1]]
-            for j in range(round(sensor_range[i]/self.PIXEL_RES)):
-                p = [round(current[k]) for k in range(2)]
-                if self.pixels[p[0]][p[1]] == PixelType.WALL:
-                    pixel_dist[i] = j
-                    break
-                current = [current[k] + unit_v[k] for k in range(2)]
-        # Each pixel is 1cm anyway.
-        
-        if self.iterations == 1:
-            command = 'j'
-        else:
-            command = self.manager.default_navigate((self.pos[0] + self.iterations*0.001, self.pos[1] + self.iterations*0.001), self.angle + self.iterations*0.01, pixel_dist[0], pixel_dist[1], pixel_dist[2])
-            # Simulate drift (linear w.r.t. time).
+            self.iterations += 1
 
-        if command == 'j':
-
-            self.prev_dist_L = 10000
-            self.prev_dist_R = 10000
-
-            beacon_angles = []
+            pixel_dist = [1000, 1000, 1000]
+            sensor_range = (self.FRONT_RANGE, self.SIDE_RANGE, self.SIDE_RANGE)
+            add_angle = (0, -90, 90)
             for i in range(3):
-                diff = (self.manager.beacon_tri.beacon_pos[i][0] - self.pos[0], self.pos[1] - self.manager.beacon_tri.beacon_pos[i][1])
-                arg = (90 - (math.degrees(math.atan2(diff[1], diff[0])) % 360)) % 360
-                beacon_angles.append(arg)
-            
-            # Simulate turning the robot to face the first beacon.
-            diff = (self.manager.beacon_tri.beacon_pos[0][0] - self.pos[0], self.pos[1] - self.manager.beacon_tri.beacon_pos[0][1])
-            theta = math.degrees(math.atan2(diff[1], diff[0]))
-            if theta >= -90:
-                self.angle = 90 - theta
-            else:
-                self.angle = -theta - 270
-
-            scan_angles = []
-            scan_left = []
-            scan_right = []
-            for i in range(self.SCAN_RES):
-                scan_angles.append(int(i / self.SCAN_RES * 360))
-                scan_left.append(1000)
-                scan_right.append(1000)
-            for i in range(self.SCAN_RES):
-                left_angle = (self.angle + int(i / self.SCAN_RES * 360) - 90) % 360
-                unit_v = (math.sin(math.radians(left_angle)), -math.cos(math.radians(left_angle)))
+                sensor_angle = (self.angle + add_angle[i]) % 360
+                unit_v = (math.sin(math.radians(sensor_angle)), -math.cos(math.radians(sensor_angle)))
                 current = [self.ppos[0], self.ppos[1]]
-                for j in range(round(self.SCAN_RANGE/self.PIXEL_RES)):
+                for j in range(round(sensor_range[i]/self.PIXEL_RES)):
                     p = [round(current[k]) for k in range(2)]
                     if self.pixels[p[0]][p[1]] == PixelType.WALL:
-                        scan_left[i] = j
+                        pixel_dist[i] = j
                         break
                     current = [current[k] + unit_v[k] for k in range(2)]
             # Each pixel is 1cm anyway.
+            
+            if self.iterations == 1:
+                command = 'j'
+            else:
+                # command = self.manager.default_navigate((self.pos[0] + self.iterations*0.001, self.pos[1] + self.iterations*0.001), self.angle + self.iterations*0.01, pixel_dist[0], pixel_dist[1], pixel_dist[2])
+                command = self.manager.default_navigate((self.pos[0], self.pos[1]), self.angle, pixel_dist[0], pixel_dist[1], pixel_dist[2])
+                # Simulate drift (linear w.r.t. time).
 
-            # command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], light_scan)
-            command = self.manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], scan_angles, scan_left, scan_right)
-            if command[0] == 'e':
-                print('Reached end.')
-                return False
-            rotation = int(command)
-            self.angle += rotation # Apply rotation instantaneously.
-        
-        if pixel_dist[1] <= 10:
-            total_offset = 0
-            while pixel_dist[1] - self.prev_dist_L <= 0:
-                self.prev_dist_L = pixel_dist[1]
-                self.angle += 1
-                total_offset += 1
-                self.angle %= 360
+            if command == 'j':
+
+                self.prev_dist_L = 10000
+                self.prev_dist_R = 10000
+
+                beacon_angles = []
                 for i in range(3):
-                    sensor_angle = (self.angle + add_angle[i]) % 360
-                    unit_v = (math.sin(math.radians(sensor_angle)), -math.cos(math.radians(sensor_angle)))
+                    diff = (self.manager.beacon_tri.beacon_pos[i][0] - self.pos[0], self.pos[1] - self.manager.beacon_tri.beacon_pos[i][1])
+                    arg = (90 - (math.degrees(math.atan2(diff[1], diff[0])) % 360)) % 360
+                    beacon_angles.append(arg)
+                
+                # Simulate turning the robot to face the first beacon.
+                diff = (self.manager.beacon_tri.beacon_pos[0][0] - self.pos[0], self.pos[1] - self.manager.beacon_tri.beacon_pos[0][1])
+                theta = math.degrees(math.atan2(diff[1], diff[0]))
+                if theta >= -90:
+                    self.angle = 90 - theta
+                else:
+                    self.angle = -theta - 270
+
+                scan_angles = []
+                scan_left = []
+                scan_right = []
+                for i in range(self.SCAN_RES):
+                    scan_angles.append(int(i / self.SCAN_RES * 360))
+                    scan_left.append(1000)
+                    scan_right.append(1000)
+                for i in range(self.SCAN_RES):
+                    left_angle = (self.angle + int(i / self.SCAN_RES * 360) - 90) % 360
+                    unit_v = (math.sin(math.radians(left_angle)), -math.cos(math.radians(left_angle)))
                     current = [self.ppos[0], self.ppos[1]]
-                    for j in range(round(sensor_range[i]/self.PIXEL_RES)):
+                    for j in range(round(self.SCAN_RANGE/self.PIXEL_RES)):
                         p = [round(current[k]) for k in range(2)]
                         if self.pixels[p[0]][p[1]] == PixelType.WALL:
-                            pixel_dist[i] = j
+                            scan_left[i] = j
                             break
                         current = [current[k] + unit_v[k] for k in range(2)]
-            # angle -= total_offset * 0.4
-            self.angle %= 360
-            self.prev_dist_L = -10000
-            self.prev_dist_R = 10000
-        elif pixel_dist[2] <= 10:
-            total_offset = 0
-            while pixel_dist[2] - self.prev_dist_R <= 0:
-                self.prev_dist_R = pixel_dist[2]
-                self.angle -= 1
-                total_offset -= 1
+                # Each pixel is 1cm anyway.
+
+                # command = manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], light_scan)
+                command = self.manager.junction_navigate(beacon_angles[0], beacon_angles[1], beacon_angles[2], scan_angles, scan_left, scan_right)
+                if command[0] == 'e':
+                    print('Reached end.')
+                    return False
+                rotation = int(command)
+                self.angle += rotation # Apply rotation instantaneously.
+            
+            if pixel_dist[1] <= 10:
+                total_offset = 0
+                while pixel_dist[1] - self.prev_dist_L <= 0:
+                    self.prev_dist_L = pixel_dist[1]
+                    self.angle += 1
+                    total_offset += 1
+                    self.angle %= 360
+                    for i in range(3):
+                        sensor_angle = (self.angle + add_angle[i]) % 360
+                        unit_v = (math.sin(math.radians(sensor_angle)), -math.cos(math.radians(sensor_angle)))
+                        current = [self.ppos[0], self.ppos[1]]
+                        for j in range(round(sensor_range[i]/self.PIXEL_RES)):
+                            p = [round(current[k]) for k in range(2)]
+                            if self.pixels[p[0]][p[1]] == PixelType.WALL:
+                                pixel_dist[i] = j
+                                break
+                            current = [current[k] + unit_v[k] for k in range(2)]
+                # angle -= total_offset * 0.4
                 self.angle %= 360
-                for i in range(3):
-                    sensor_angle = (self.angle + add_angle[i]) % 360
-                    unit_v = (math.sin(math.radians(sensor_angle)), -math.cos(math.radians(sensor_angle)))
-                    current = [self.ppos[0], self.ppos[1]]
-                    for j in range(round(sensor_range[i]/self.PIXEL_RES)):
-                        p = [round(current[k]) for k in range(2)]
-                        if self.pixels[p[0]][p[1]] == PixelType.WALL:
-                            pixel_dist[i] = j
-                            break
-                        current = [current[k] + unit_v[k] for k in range(2)]
-            # angle += total_offset * 0.4
-            self.angle %= 360
-            self.prev_dist_R = -10000
-            self.prev_dist_L = 10000
-        
-        direction = self.angle
-        direction_2 = math.radians((90 - direction) % 360)
-        self.pos[0] += self.SPEED * math.cos(direction_2)
-        self.pos[1] -= self.SPEED * math.sin(direction_2)
-        self.ppos = self.to_pixels(self.pos)
-        self.robot_path.append((self.ppos[0], self.ppos[1]))
+                self.prev_dist_L = -10000
+                self.prev_dist_R = 10000
+            elif pixel_dist[2] <= 10:
+                total_offset = 0
+                while pixel_dist[2] - self.prev_dist_R <= 0:
+                    self.prev_dist_R = pixel_dist[2]
+                    self.angle -= 1
+                    total_offset -= 1
+                    self.angle %= 360
+                    for i in range(3):
+                        sensor_angle = (self.angle + add_angle[i]) % 360
+                        unit_v = (math.sin(math.radians(sensor_angle)), -math.cos(math.radians(sensor_angle)))
+                        current = [self.ppos[0], self.ppos[1]]
+                        for j in range(round(sensor_range[i]/self.PIXEL_RES)):
+                            p = [round(current[k]) for k in range(2)]
+                            if self.pixels[p[0]][p[1]] == PixelType.WALL:
+                                pixel_dist[i] = j
+                                break
+                            current = [current[k] + unit_v[k] for k in range(2)]
+                # angle += total_offset * 0.4
+                self.angle %= 360
+                self.prev_dist_R = -10000
+                self.prev_dist_L = 10000
+            
+            direction = self.angle
+            direction_2 = math.radians((90 - direction) % 360)
+            self.pos[0] += self.SPEED * math.cos(direction_2)
+            self.pos[1] -= self.SPEED * math.sin(direction_2)
+            self.ppos = self.to_pixels(self.pos)
+            self.robot_path.append((self.ppos[0], self.ppos[1]))
 
         return True
