@@ -99,13 +99,15 @@ else{
   if(vb<4){
     pwm += 0.2;
   }
-  else if(vb > 5.2){
+  else if(vb > 5){
     pwm -= 0.1;
   }
   j=0;
 }
     
-
+if(va > 17.5){
+  pwm += 0.001;
+}
 
 
     com_count++;              //used for debugging.
