@@ -199,7 +199,7 @@ def config9():
 
 # Configs to test: 4, 8
 
-config8()
+config4()
 WALL_WIDTH = 0.08
 X_LIM = 3
 Y_LIM = 2

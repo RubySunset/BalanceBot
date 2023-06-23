@@ -1,6 +1,7 @@
 import math
 import time
 import random
+import heapq
 
 # Main class. Instantiate and use in other modules.
 class MazeTracker:
@@ -105,6 +106,44 @@ class MazeTracker:
                 shortest_path.insert(0, node)
                 node = prev[node]
         return distance, shortest_path, prev
+
+    def a_star(self, source, dest):
+        f = {}
+        g = {}
+        prev = {}
+        for v in self.a_list:
+            f[v] = math.inf
+            g[v] = math.inf
+            prev[v] = None
+        g[source] = 0
+        f[source] = math.dist(source, dest)
+        open_pq = []
+        heapq.heappush(open_pq, (f[source], source))
+        open_set = {source}
+        path_found = False
+        while len(open_set) > 0:
+            current_f, current_pos = heapq.heappop(open_pq)
+            open_set.remove(current_pos)
+            if current_pos == dest:
+                path_found = True
+                break
+            for n in self.a_list[current_pos]:
+                t = g[current_pos] + math.dist(current_pos, n)
+                if t < g[n]:
+                    prev[n] = current_pos
+                    g[n] = t
+                    f[n] = t + math.dist(n, dest)
+                    if n not in open_set:
+                        heapq.heappush(open_pq, (f[n], n))
+                        open_set.add(n)
+        if not path_found:
+            raise Exception('Path not found.')
+        path = []
+        current = dest
+        while current != None:
+            path.insert(0, current)
+            current = prev[current]
+        return path
     
     # Try to find a vertex near enough to the given position.
     def find_vertex(self, pos):
@@ -252,9 +291,10 @@ class MazeTracker:
                 unexplored_angles.remove(link_angles[closest_link])
             return unexplored_angles[0]
     
-    # Navigate after the discovery phase using Dijkstra.
-    def dijkstra_navigate(self, pos):
-        tree, path, prev = self.dijkstra(pos, self.end)
+    # Navigate after the discovery phase using A* search.
+    def a_star_navigate(self, pos):
+        path = self.a_star(pos, self.end)
+        # tree, path, prev = self.dijkstra(pos, self.end)
         target_pos = path[1]
         # diff = [target_pos[i] - pos[i] for i in range(2)]
         diff = (target_pos[0] - pos[0], pos[1] - target_pos[1])
@@ -263,7 +303,8 @@ class MazeTracker:
     # Generate the complete shortest path from start to end, for the front-end to display
     # once the robot has finished the discovery phase.
     def generate_complete_path(self):
-        tree, self.external_path, prev = self.dijkstra(self.start, self.end)
+        self.external_path = self.a_star(self.start, self.end)
+        # tree, self.external_path, prev = self.dijkstra(self.start, self.end)
     
     # Generate the shortest path from start to robot's position, for the front-end to display
     # while the robot is still in the discovery phase.

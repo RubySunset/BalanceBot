@@ -34,6 +34,7 @@ class MazeBitmap:
         # self.painted_links = [] # Pairs of vertices whose links have already been painted.
         self.wall_pixels = []
         self.img_pixels = np.zeros((self.X_PIXELS * self.pp, self.Y_PIXELS * self.pp, 3))
+        self.painted_path = set()
     
     # Reset to initial state.
     def reset(self):
@@ -46,6 +47,7 @@ class MazeBitmap:
         # self.painted_links = []
         self.wall_pixels = []
         self.img_pixels = np.zeros((self.X_PIXELS * self.pp, self.Y_PIXELS * self.pp, self.pp))
+        self.painted_path = set()
     
     # Convert a point in metres (standard units) to pixels.
     def to_pixels(self, point):
@@ -75,7 +77,8 @@ class MazeBitmap:
             for j in range(self.Y_PIXELS):
                 if self.pixels[i][j] in (PixelType.VERTEX, PixelType.PATH, PixelType.CLEARED):
                     self.pixels[i][j] = PixelType.EMPTY
-                    self.debug_pixel(self.img_pixels, (i, j), (0, 0, 0))
+                    if (i, j) not in self.painted_path:
+                        self.debug_pixel(self.img_pixels, (i, j), (0, 0, 0))
         for v in a_list: # Iterate through vertices.
             for n in a_list[v]: # Iterate through neighbours.
                 # if (v, n) in self.painted_links or (n, v) in self.painted_links: # If this link has already been painted.
@@ -88,7 +91,8 @@ class MazeBitmap:
                 for p in (p1, p2):
                     if self.pixels[p[0]][p[1]] not in (PixelType.START, PixelType.END):
                         self.pixels[p[0]][p[1]] = PixelType.VERTEX
-                        self.debug_pixel(self.img_pixels, p, (0, 0, 255))
+                        if p not in self.painted_path:
+                            self.debug_pixel(self.img_pixels, p, (0, 0, 255))
                 diff = [p2[i] - p1[i] for i in range(2)] # Find the difference vector.
                 p_dist = math.ceil(math.dist(p1, p2)) # Choose the upper bound on the length of the wall.
                 unit_diff = [diff[i] / p_dist for i in range(2)] # Normalise the difference vector to get the direction.
@@ -102,10 +106,12 @@ class MazeBitmap:
                                 pass
                             elif c == [j, k]:
                                 self.pixels[j][k] = PixelType.PATH # Mark this cell as a path.
-                                self.debug_pixel(self.img_pixels, (j, k), (255, 255, 255))
+                                if (j, k) not in self.painted_path:
+                                    self.debug_pixel(self.img_pixels, (j, k), (255, 255, 255))
                             elif math.dist(c, (j, k)) <= self.P_WIDTH/2:
                                 self.pixels[j][k] = PixelType.CLEARED # Mark this cell as cleared.
-                                self.debug_pixel(self.img_pixels, (j, k), (128, 128, 128))
+                                if (j, k) not in self.painted_path:
+                                    self.debug_pixel(self.img_pixels, (j, k), (128, 128, 128))
                     current = [current[i] + unit_diff[i] for i in range(2)]
         self.prev_a_list = a_list
         # print('Pixel array update time:', round(time.time() - start_time, 3))
@@ -155,9 +161,7 @@ class MazeBitmap:
                             self.wall_pixels.append((j, k))
                 current = [current[i] + unit_diff[i] for i in range(2)]
         for pos in self.wall_pixels:
-            for x in range(self.pp):
-                for y in range(self.pp):
-                    self.img_pixels[self.pp*pos[0] + x][self.pp*pos[1] + y] = (255, 0, 255)
+            self.debug_pixel(self.img_pixels, pos, (255, 0, 255))
     
     # Render the pixel array, with the actual walls overlaid on top.
     def render_pixels_debug(self, walls, width):
@@ -207,10 +211,12 @@ class MazeBitmap:
     def get_bitmap_debug(self, pos, robot_path, external_path):
         # for pos in robot_path:
         #     self.debug_pixel(self.img_pixels, pos, (0, 255, 255))
+        self.debug_pixel(self.img_pixels, pos, (0, 255, 255))
+        self.painted_path.add(pos)
         foo = np.copy(self.img_pixels)
         self.debug_pixel(foo, pos, (0, 0, 255))
-        for pos in robot_path:
-            self.debug_pixel(foo, pos, (0, 255, 255))
+        # for pos in robot_path:
+        #     self.debug_pixel(foo, pos, (0, 255, 255))
         try:
             for pos in external_path:
                 self.debug_pixel(foo, pos, (255, 255, 0))

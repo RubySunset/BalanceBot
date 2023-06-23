@@ -44,6 +44,7 @@ class MazeManager:
         self.prev_dr_angle = None
         self.robot_pos = None # The best estimate of the robot's current position.
         self.robot_angle = None # The best estimate of the robot's current orientation.
+        self.send_to_db = False
     
     # Reset to the initial state.
     def reset(self):
@@ -66,6 +67,7 @@ class MazeManager:
         self.prev_dr_angle = None
         self.robot_pos = None
         self.robot_angle = None
+        self.send_to_db = False
     
     # Set a starting point.
     def set_start(self, pos):
@@ -218,8 +220,8 @@ class MazeManager:
             if self.is_discovered:
                 print('Finished.')
                 # self.maze_db.add_doc(self.get_bitmap(), self.get_path())
-                # self.maze_db.add_doc(self.bitmap.to_pixels(self.tracker.start), self.bitmap.to_pixels(self.tracker.end), self.get_edges(), self.get_path())
-                # TODO
+                if self.send_to_db:
+                    self.maze_db.add_doc(self.bitmap.to_pixels(self.tracker.start), self.bitmap.to_pixels(self.tracker.end), self.get_edges(), self.get_path())
                 return 'e'
         
         # Update relevant data structures.
@@ -239,11 +241,11 @@ class MazeManager:
             if math.dist(self.robot_pos, self.tracker.end) <= self.tracker.MIN_DIST:
                 print('Finished.')
                 # self.maze_db.add_doc(self.get_bitmap(), self.get_path())
-                # self.maze_db.add_doc(self.bitmap.to_pixels(self.tracker.start), self.bitmap.to_pixels(self.tracker.end), self.get_edges(), self.get_path())
-                # TODO
+                if self.send_to_db:
+                    self.maze_db.add_doc(self.bitmap.to_pixels(self.tracker.start), self.bitmap.to_pixels(self.tracker.end), self.get_edges(), self.get_path())
                 return 'e'
             else:
-                target_angle = self.tracker.dijkstra_navigate(v_pos)
+                target_angle = self.tracker.a_star_navigate(v_pos)
         else:
             target_angle = self.tracker.discovery_navigate(v_pos, link_angles)
         print('Target angle:', target_angle)
