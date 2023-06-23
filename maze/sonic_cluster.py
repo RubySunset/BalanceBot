@@ -63,6 +63,28 @@ def get_link_angles(angles, left_dists, right_dists, robot_angle):
         temp.append((angle - 90) % 360)
     return temp
 
+# def get_link_angles(pos, angle, last_vertex, left_dists):
+#     diff = (pos[0] - last_vertex[0], last_vertex[1] - pos[1])
+#     entry_angle = (90 - math.degrees(math.atan2(diff[1], diff[0]))) % 360
+#     dist_scan = []
+#     for reading in left_dists:
+#         if reading >= DIST_T:
+#             dist_scan.append(True)
+#         else:
+#             dist_scan.append(False)
+#     temp = [180]
+#     scan_res = len(dist_scan)
+#     if dist_scan[0]:
+#         temp.append(270)
+#     if dist_scan[int(scan_res / 4)]:
+#         temp.append(0)
+#     if dist_scan[int(scan_res / 2)]:
+#         temp.append(90)
+#     link_angles = []
+#     for angle in temp:
+#         link_angles.append((angle + entry_angle) % 360)
+#     return link_angles
+
 # Rearrange link angles to have the first be closest to north.
 def rearrange_link_angles(link_angles):
     closest_index = 0
@@ -78,6 +100,9 @@ def rearrange_link_angles(link_angles):
 
 def find_link_angles(angles, left_dist, right_dist, robot_angle):
     return rearrange_link_angles(get_link_angles(angles, left_dist, right_dist, robot_angle))
+
+# def find_link_angles(pos, last_vertex, left_dists):
+#     return rearrange_link_angles(get_link_angles(pos, last_vertex, left_dists))
 
 # def get_link_angles_cluster(robot_angle, angles, left, right=None):
 #     assert len(angles) == len(left)

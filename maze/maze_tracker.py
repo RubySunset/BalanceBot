@@ -259,6 +259,7 @@ class MazeTracker:
                     min_dist = tree[v]
                     min_pos = v
             if min_pos == None:
+                print('RANDOM')
                 return random.random() * 360
             else:
                 tree, path, prev = self.dijkstra(pos, min_pos)
@@ -276,6 +277,7 @@ class MazeTracker:
                 else:
                     return target_angle
         elif len(link_angles) < self.num_links[pos]:
+            print('RANDOM')
             return random.random() * 360
         else:
             unexplored_angles = []

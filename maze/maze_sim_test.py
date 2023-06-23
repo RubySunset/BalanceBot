@@ -1,7 +1,7 @@
 import pygame
 from maze_sim import *
 
-sim = MazeSim(3)
+sim = MazeSim(2)
 pygame.init()
 screen = pygame.display.set_mode((sim.X_PIXELS * sim.pp, sim.Y_PIXELS * sim.pp))
 while sim.update():

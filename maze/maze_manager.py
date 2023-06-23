@@ -204,6 +204,7 @@ class MazeManager:
         # link_angles = find_link_angles(left, self.robot_angle)
         # link_angles = find_link_angles_cluster(self.robot_angle, angles, left)
         link_angles = find_link_angles(angles, left_dist, right_dist, self.robot_angle)
+        # link_angles = find_link_angles(self.robot_pos, self.last_vertex, left_dist)
 
         # # Translate angle to forwards/reverse-relative form.
         # if self.reverse_mode:
