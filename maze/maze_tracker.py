@@ -1,34 +1,67 @@
 import math
 import time
+import random
+import heapq
 
 # Main class. Instantiate and use in other modules.
 class MazeTracker:
 
-    def __init__(self):
+    def __init__(self, MIN_DIST):
+        self.MIN_DIST = MIN_DIST # The minimum distance between two vertices in metres.
         self.a_list = {} # Adjacency list to store the maze graph. Vertices are stored by their positions.
-        self.marks = {} # A mapping from vertex positions to lists of link marks (used by Tremaux's algorithm).
+        # self.marks = {} # A mapping from vertex positions to lists of link marks.
+        self.num_links = {} # The total number of links for each vertex.
+        self.explored_links = {} # The number of explored links for each vertex.
         self.prev_vertex = None # The position of the last vertex reached.
         self.start = None # Start position.
         self.end = None # End position.
         self.external_path = [] # The path sent to the web server to display.
         # When the robot is still traversing the maze, this is the shortest path from the start to the robot.
         # When the robot has reached the end and has surveyed the entire maze, this is the shortest path from start to end.
+        self.prev_entry_link = None
+        self.pp_tree = None
+        self.pp_next = None
     
     # Reset to initial state.
     def reset(self):
         self.a_list = {}
-        self.marks = {}
+        # self.marks = {}
+        self.num_links = {}
+        self.explored_links = {}
+        self.prev_vertex = None
         self.start = None
         self.end = None
         self.external_path = []
+        self.prev_entry_link = None
+        self.pp_tree = None
+        self.pp_next = None
     
     # Finds the difference between two numbers in modular arithmetic.
     def mod_diff(self, a, b, mod):
-        diff = abs(a - b)
-        if diff < mod/2:
-            return diff
+        diff = b - a
+        if diff <= -mod/2:
+            return diff + mod
+        elif diff > mod/2:
+            return diff - mod
         else:
-            return mod - diff
+            return diff
+    
+    # Finds the average of two numbers in modular arithmetic.
+    def mod_avg(self, a, b, mod):
+        # if a > 180:
+        #     x = a - 360
+        # else:
+        #     x = a
+        # if b > 180:
+        #     y = b - 360
+        # else:
+        #     y = b
+        # return (x + y) / 2
+        diff = self.mod_diff(a, b, mod)
+        if diff > 0:
+            return (a + diff/2) % 360
+        else:
+            return (a - diff/2) % 360
     
     # Set a starting point.
     def set_start(self, pos):
@@ -52,11 +85,11 @@ class MazeTracker:
         distance[source] = 0
         while len(unvisited) > 0:
             current = unvisited[0]
-            if dest != None and current == dest:
-                break
             for vertex in unvisited:
                 if distance[vertex] < distance[current]:
                     current = vertex
+            if dest != None and current == dest:
+                break
             unvisited.remove(current)
             for neighbour in self.a_list[current]:
                 if neighbour not in unvisited:
@@ -72,81 +105,198 @@ class MazeTracker:
             while node != None:
                 shortest_path.insert(0, node)
                 node = prev[node]
-        return distance, shortest_path
+        return distance, shortest_path, prev
+
+    def a_star(self, source, dest):
+        f = {}
+        g = {}
+        prev = {}
+        for v in self.a_list:
+            f[v] = math.inf
+            g[v] = math.inf
+            prev[v] = None
+        g[source] = 0
+        f[source] = math.dist(source, dest)
+        open_pq = []
+        heapq.heappush(open_pq, (f[source], source))
+        open_set = {source}
+        path_found = False
+        while len(open_set) > 0:
+            current_f, current_pos = heapq.heappop(open_pq)
+            open_set.remove(current_pos)
+            if current_pos == dest:
+                path_found = True
+                break
+            for n in self.a_list[current_pos]:
+                t = g[current_pos] + math.dist(current_pos, n)
+                if t < g[n]:
+                    prev[n] = current_pos
+                    g[n] = t
+                    f[n] = t + math.dist(n, dest)
+                    if n not in open_set:
+                        heapq.heappush(open_pq, (f[n], n))
+                        open_set.add(n)
+        if not path_found:
+            raise Exception('Path not found.')
+        path = []
+        current = dest
+        while current != None:
+            path.insert(0, current)
+            current = prev[current]
+        return path
+    
+    # Try to find a vertex near enough to the given position.
+    def find_vertex(self, pos):
+        closest_dist = math.inf
+        closest_v = None
+        for v in self.a_list:
+            dist = math.dist(v, pos)
+            if dist <= self.MIN_DIST and dist < closest_dist:
+                closest_dist = dist
+                closest_v = v
+        return closest_v
+    
+    # Replace all instances of one vertex with another.
+    def replace_vertex(self, old_v, new_v):
+        self.a_list[new_v] = self.a_list.pop(old_v)
+        self.num_links[new_v] = self.num_links.pop(old_v)
+        self.explored_links[new_v] = self.explored_links.pop(old_v)
+        for v in self.a_list:
+            if old_v in self.a_list[v]:
+                self.a_list[v].remove(old_v)
+                self.a_list[v].add(new_v)
 
     # Visit a vertex, updating the relevant graph structures.
     # Assume all angles are taken clockwise from north in the range [0, 360].
-    def visit_vertex(self, pos, link_angles):
-        
-        if self.prev_vertex == None: # If we are at the start.
-            self.a_list[pos] = set()
-            self.marks[pos] = []
-            for i in range(len(link_angles)):
-                self.marks[pos].append(0)
-        else:
-            self.a_list[self.prev_vertex].add(pos)
-            if pos in self.a_list:
-                self.a_list[pos].add(self.prev_vertex)
+    def visit_vertex(self, pos, link_angles, is_discovered):
+        if self.prev_vertex == None: # If we are at the first iteration.
+            self.a_list[self.start] = set()
+            self.num_links[self.start] = len(link_angles)
+            self.explored_links[self.start] = 0
+            return self.start
+        last_vertex = self.prev_vertex
+        # b = math.dist(pos, self.prev_vertex)
+        # dist = b
+        # for v in self.a_list:
+        #     if v in (self.prev_vertex, pos):
+        #         continue
+        #     c = math.dist(pos, v)
+        #     a = math.dist(self.prev_vertex, v)
+        #     alpha = math.degrees(math.acos((b**2 + c**2 - a**2) / (2*b*c)))
+        #     d = math.dist(pos, v)
+        #     if d < dist and alpha <= 10:
+        #         last_vertex = v
+        #         dist = d
+        if math.dist(pos, self.start) <= self.MIN_DIST:
+            if last_vertex != self.start:
+                if last_vertex not in self.a_list[self.start]:
+                    self.explored_links[self.start] += 1
+                    self.explored_links[last_vertex] += 1
+                self.a_list[last_vertex].add(self.start)
+                self.a_list[self.start].add(last_vertex)
+            return self.start
+        elif math.dist(pos, self.end) <= self.MIN_DIST:
+            if last_vertex != self.end:
+                if self.end in self.a_list:
+                    if last_vertex not in self.a_list[self.end]:
+                        self.explored_links[self.end] += 1
+                        self.explored_links[last_vertex] += 1
+                    self.a_list[last_vertex].add(self.end)
+                    self.a_list[self.end].add(last_vertex)
+                else:
+                    self.a_list[last_vertex].add(self.end)
+                    self.a_list[self.end] = {last_vertex}
+                    self.num_links[self.end] = len(link_angles)
+                    self.explored_links[self.end] = 1
+                    self.explored_links[last_vertex] += 1
+            return self.end
+        elif math.dist(pos, last_vertex) <= self.MIN_DIST: # If we are at the same vertex.
+            if is_discovered:
+                return last_vertex
             else:
-                self.a_list[pos] = {self.prev_vertex}
-                self.marks[pos] = []
-                for i in range(len(link_angles)):
-                    self.marks[pos].append(0)
+                avg_pos = (round((pos[0] + last_vertex[0]) / 2, 3), round((pos[1] + last_vertex[1]) / 2, 3))
+                self.replace_vertex(last_vertex, avg_pos)
+                return avg_pos
+        else:
+            near_v = self.find_vertex(pos)
+            if near_v == None:
+                self.a_list[last_vertex].add(pos)
+                self.a_list[pos] = {last_vertex}
+                self.num_links[pos] = len(link_angles)
+                self.explored_links[pos] = 1
+                self.explored_links[last_vertex] += 1
+                return pos
+            else:
+                if is_discovered:
+                    this_pos = near_v
+                else:
+                    this_pos = (round((near_v[0] + pos[0]) / 2, 3), round((near_v[1] + pos[1]) / 2, 3))
+                    self.replace_vertex(near_v, this_pos)
+                if last_vertex not in self.a_list[this_pos]:
+                    self.explored_links[this_pos] += 1
+                    self.explored_links[last_vertex] += 1
+                self.a_list[last_vertex].add(this_pos)
+                self.a_list[this_pos].add(last_vertex)
+                return this_pos
     
-    # Find the entry link to a vertex, and apply an entry mark.
-    def entry_mark(self, pos, link_angles):
-        marks = self.marks[pos]
-        if len(marks) != len(link_angles):
-            raise Exception('Current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(len(marks)) + ').')
-        if self.prev_vertex == None: # If we are at the start.
-            entry_angle = link_angles[0] # Assume we entered from a valid link, doesn't matter which one.
-            entry_link = 0
+    # Navigate during the discovery phase. Also apply an exit mark.
+    def discovery_navigate(self, pos, link_angles):
+        self.pp_next = None
+        if self.num_links[pos] != len(link_angles):
+            print('!!! Warning: current number of links (' + str(len(link_angles)) + ') does not match previously found number of links (' + str(self.num_links[pos]) + ').')
+            # Assume that the greater number of links is correct, for safety.
+            if len(link_angles) > self.num_links[pos]:
+                self.num_links[pos] = len(link_angles)
+        assert self.explored_links[pos] == len(self.a_list[pos])
+        if self.explored_links[pos] > self.num_links[pos]:
+            print('!!! Warning: number of explored links exceeded total number of links.')
+        if self.explored_links[pos] >= self.num_links[pos]:
+            tree, path, prev = self.dijkstra(pos)
+            min_dist = math.inf
+            min_pos = None
+            for v in self.a_list:
+                if self.explored_links[v] < self.num_links[v] and tree[v] < min_dist:
+                    min_dist = tree[v]
+                    min_pos = v
+            if min_pos == None:
+                print('RANDOM')
+                return random.random() * 360
+            else:
+                tree, path, prev = self.dijkstra(pos, min_pos)
+                target_pos = path[1]
+                self.pp_next = target_pos
+                diff = (target_pos[0] - pos[0], pos[1] - target_pos[1])
+                target_angle = (90 - math.degrees(math.atan2(diff[1], diff[0]))) % 360
+                if len(link_angles) == self.num_links[pos]:
+                    target_link = 0
+                    for i in range(len(link_angles)):
+                        if abs(self.mod_diff(link_angles[i], target_angle, 360)) < abs(self.mod_diff(link_angles[target_link], target_angle, 360)):
+                            target_link = i
+                    # avg_angle = (target_angle + link_angles[target_link]) / 2
+                    return self.mod_avg(target_angle, link_angles[target_link], 360)
+                else:
+                    return target_angle
+        elif len(link_angles) < self.num_links[pos]:
+            print('RANDOM')
+            return random.random() * 360
         else:
-            # diff = [pos[i] - self.prev_vertex[i] for i in range(2)]
-            diff = (pos[0] - self.prev_vertex[0], self.prev_vertex[1] - pos[1])
-            entry_angle = (90 - math.degrees(math.atan2(-diff[1], -diff[0]))) % 360
-            # Find the link corresponding to the entry angle.
-            entry_link = 0
-            for i in range(len(link_angles)):
-                if self.mod_diff(link_angles[i], entry_angle, 360) < self.mod_diff(link_angles[entry_link], entry_angle, 360):
-                    entry_link = i
-            marks[entry_link] += 1 # Apply entry mark.
-        return entry_link
-
-    # Navigate during the discovery phase using the modified Tremaux's algorithm. Also apply an exit mark.
-    def tremaux_navigate(self, pos, link_angles, entry_link):
-        marks = self.marks[pos]
-        # Apply Tremaux's algorithm to find the target link.
-        target_link = None
-        others_unmarked = True # Are all the other entrances unmarked?
-        candidate = None # A possible direciton if all other entrances are unmarked.
-        for i in range(len(link_angles)):
-            if i == entry_link:
-                continue
-            elif candidate == None and marks[i] == 0:
-                candidate = i
-            elif marks[i] != 0:
-                others_unmarked = False
-                break
-        if others_unmarked and len(link_angles) > 1:
-            # We can only choose another entrance if there is another entrance to choose from...
-            target_link = candidate
-        elif marks[entry_link] < 2:
-            target_link = entry_link # Go back the way we came.
-        else:
-            min_link = None
-            min_val = math.inf
-            for i in range(len(link_angles)):
-                if marks[i] < min_val:
-                    min_link = i
-                    min_val = marks[i]
-            target_link = min_link
-        marks[target_link] += 1 # Apply exit mark.
-        return link_angles[target_link]
-        
-    # Navigate after the discovery phase using Dijkstra.
-    def dijkstra_navigate(self, pos):
-        tree, path = self.dijkstra(pos, self.end)
+            unexplored_angles = []
+            for angle in link_angles:
+                unexplored_angles.append(angle)
+            for v in self.a_list[pos]:
+                diff = (v[0] - pos[0], pos[1] - v[1])
+                true_angle = (90 - math.degrees(math.atan2(diff[1], diff[0]))) % 360
+                closest_link = 0
+                for i in range(len(link_angles)):
+                    if abs(self.mod_diff(link_angles[i], true_angle, 360)) < abs(self.mod_diff(link_angles[closest_link], true_angle, 360)):
+                        closest_link = i
+                unexplored_angles.remove(link_angles[closest_link])
+            return unexplored_angles[0]
+    
+    # Navigate after the discovery phase using A* search.
+    def a_star_navigate(self, pos):
+        path = self.a_star(pos, self.end)
+        # tree, path, prev = self.dijkstra(pos, self.end)
         target_pos = path[1]
         # diff = [target_pos[i] - pos[i] for i in range(2)]
         diff = (target_pos[0] - pos[0], pos[1] - target_pos[1])
@@ -155,21 +305,37 @@ class MazeTracker:
     # Generate the complete shortest path from start to end, for the front-end to display
     # once the robot has finished the discovery phase.
     def generate_complete_path(self):
-        tree, self.external_path = self.dijkstra(self.start, self.end)
+        self.external_path = self.a_star(self.start, self.end)
+        # tree, self.external_path, prev = self.dijkstra(self.start, self.end)
     
     # Generate the shortest path from start to robot's position, for the front-end to display
     # while the robot is still in the discovery phase.
-    def generate_partial_path(self, pos):
-        tree, self.external_path = self.dijkstra(self.start, self.prev_vertex)
-        self.external_path.append(pos)
+    def generate_partial_path(self, disc_pos, cont_pos):
+        self.pp_tree, self.external_path, self.pp_prev = self.dijkstra(self.start, disc_pos)
+        self.external_path.append(cont_pos)
+    
+    # Update the external path with the robot's current position.
+    def update_partial_path(self, pos):
+        if self.pp_next == None:
+            self.external_path.pop()
+            self.external_path.append(pos)
+        else:
+            dist_1 = self.pp_tree[self.prev_vertex] + math.dist(self.prev_vertex, pos)
+            dist_2 = self.pp_tree[self.pp_next] + math.dist(self.pp_next, pos)
+            if dist_1 < dist_2 or self.external_path[-2] == self.pp_next:
+                self.external_path.pop()
+                self.external_path.append(pos)
+            else:
+                self.external_path.pop()
+                self.external_path.pop()
+                self.external_path.append(pos)
 
     # Test to see if we have discovered enough of the maze to determine the shortest path.
     def enough_discovered(self):
-        dist_tree, path = self.dijkstra(self.start, self.end)
-        for vertex in self.a_list:
-            for mark in self.marks[vertex]:
-                if mark == 0 and dist_tree[vertex] + math.dist(vertex, self.end) < dist_tree[self.end]:
-                    # If there could exist a shorter path to the end via this vertex.
-                    return False
+        dist_tree, path, prev = self.dijkstra(self.start, self.end)
+        for v in self.a_list:
+            if self.explored_links[v] < self.num_links[v] and dist_tree[v] + math.dist(v, self.end) < dist_tree[self.end]:
+                # If there could exist a shorter path to the end via this vertex.
+                return False
         print('Sufficient portion of maze discovered!')
         return True
